@@ -1,0 +1,15 @@
+[user]
+	name = redacted
+	email = redacted@users.noreply.github.com
+[init]
+	defaultBranch = main
+[pull]
+	rebase = true
+[core]
+	editor = cursor --wait
+	pager = delta
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+	light = false
