@@ -15,3 +15,4 @@ moved to `~/dotfiles/.backup-YYYYMMDD-HHMMSS/` before being replaced.
 - `.zshrc`, `.zprofile`, `.gitconfig`
 - `.config/ghostty/config`
 - `.config/mise/config.toml`
+- `.config/zsh/op-keys.zsh` — 1Password-backed API key loader, sourced from `.zshrc`

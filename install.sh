@@ -10,6 +10,7 @@ declare -a FILES=(
   ".gitconfig"
   ".config/ghostty/config"
   ".config/mise/config.toml"
+  ".config/zsh/op-keys.zsh"
 )
 
 backup_made=0
@@ -34,4 +35,6 @@ for rel in "${FILES[@]}"; do
   echo "linked    $rel"
 done
 
-[ "$backup_made" = 1 ] && echo "Backups in: $BACKUP"
+if [ "$backup_made" = 1 ]; then
+  echo "Backups in: $BACKUP"
+fi
