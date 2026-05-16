@@ -46,3 +46,6 @@ if [ -z "$ANTHROPIC_API_KEY" ]; then
   fi
 fi
 unset _op_cache
+
+# bat theme — inherit terminal palette for theme coherence
+export BAT_THEME="ansi"
