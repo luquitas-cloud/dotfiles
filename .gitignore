@@ -3,3 +3,7 @@
 *.bak
 *.local
 .backup-*/
+
+# Machine-local zsh additions
+.config/zsh/local.zsh
+.config/zsh/hermes.zsh

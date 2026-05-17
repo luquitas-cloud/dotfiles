@@ -25,3 +25,6 @@ export BAT_THEME="ansi"
 
 # API keys from 1Password (cached per session)
 [ -f ~/.config/zsh/op-keys.zsh ] && source ~/.config/zsh/op-keys.zsh
+
+# Machine-local overrides (not tracked)
+[ -f ~/.config/zsh/local.zsh ] && source ~/.config/zsh/local.zsh
