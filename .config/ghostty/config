@@ -31,3 +31,18 @@ window-save-state = always
 # === Quality of life ===
 clipboard-read = allow
 clipboard-write = allow
+
+# === Hotkeys & Window Management ===
+# Global dropdown (Quake-style) Quick Terminal from anywhere in macOS
+keybind = global:cmd+shift+d=toggle_quick_terminal
+
+# Custom panel splitting controls (Vim-aligned splits)
+keybind = cmd+d=new_split:right
+keybind = cmd+shift+e=new_split:down
+
+# Vim-style navigation keys to switch between active panels
+keybind = cmd+h=goto_split:left
+keybind = cmd+j=goto_split:bottom
+keybind = cmd+k=goto_split:top
+keybind = cmd+l=goto_split:right
+

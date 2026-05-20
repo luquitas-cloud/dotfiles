@@ -8,6 +8,16 @@ alias la='eza -la --icons --git'
 #   alias grep='rg'
 alias top='btop'
 
+opencode() {
+  (
+    export XDG_CONFIG_HOME="$HOME/code/personal/opencode/.xdg/config"
+    export XDG_CACHE_HOME="$HOME/code/personal/opencode/.xdg/cache"
+    export XDG_DATA_HOME="$HOME/code/personal/opencode/.xdg/data"
+    export XDG_STATE_HOME="$HOME/code/personal/opencode/.xdg/state"
+    cd "$HOME/code/personal/opencode" && ./node_modules/.bin/opencode "$@"
+  )
+}
+
 # History
 HISTSIZE=50000
 SAVEHIST=50000
@@ -16,9 +26,21 @@ setopt HIST_IGNORE_DUPS HIST_IGNORE_SPACE
 # Shell integrations
 eval "$(zoxide init zsh)"
 eval "$(starship init zsh)"
-eval "$(mise activate zsh)"
 eval "$(direnv hook zsh)"
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# fzf fuzzy finder previews (powered by fd and bat)
+export FZF_DEFAULT_COMMAND='fd --type f --strip-cwd-prefix --hidden --follow --exclude .git'
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_DEFAULT_OPTS="
+  --height 45% 
+  --layout=reverse 
+  --border 
+  --info=inline
+  --preview 'if [ -d {} ]; then eza --icons --git --color=always {}; else bat --color=always --style=numbers --line-range :500 {}; fi'
+  --preview-window='right:55%:wrap'
+"
+
 
 # bat — inherit terminal palette
 export BAT_THEME="ansi"
@@ -28,3 +50,12 @@ export BAT_THEME="ansi"
 
 # Machine-local overrides (not tracked)
 [ -f ~/.config/zsh/local.zsh ] && source ~/.config/zsh/local.zsh
+
+eval "$(mise activate zsh)"
+
+# Added by Antigravity
+export PATH="/Users/lucas/.antigravity/antigravity/bin:$PATH"
+
+
+# Added by Antigravity CLI installer
+export PATH="/Users/lucas/.local/bin:$PATH"
