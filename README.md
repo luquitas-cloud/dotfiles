@@ -27,11 +27,11 @@ Ghostty manages splits natively with zero resource overhead. The following bindi
 *   **`Cmd + Shift + D` (Global Quick Terminal):** Toggles a dropdown terminal sliding down from the top of the screen instantly from **any application** in macOS. Hit it again to slide it back out of sight.
 *   **`Cmd + D` (Vertical Split):** Split the terminal vertically (creates a panel to the right).
 *   **`Cmd + Shift + E` (Horizontal Split):** Split the terminal horizontally (creates a panel below).
-*   **Vim Navigation (`Cmd + H/J/K/L`):** Navigate focus cleanly between your open split panes using directional keys:
-    *   `Cmd + H` $\rightarrow$ switch focus left
-    *   `Cmd + L` $\rightarrow$ switch focus right
-    *   `Cmd + K` $\rightarrow$ switch focus up
-    *   `Cmd + J` $\rightarrow$ switch focus down
+*   **Pane Navigation (`Cmd + Option + Arrow Keys`):** Ghostty's native, conflict-free hotkey to move focus between split panes:
+    *   `Cmd + Option + Left Arrow` $\rightarrow$ switch focus left
+    *   `Cmd + Option + Right Arrow` $\rightarrow$ switch focus right
+    *   `Cmd + Option + Up Arrow` $\rightarrow$ switch focus up
+    *   `Cmd + Option + Down Arrow` $\rightarrow$ switch focus down
 
 ### 📂 Interactive Fuzzy Searching (`fzf` + `fd` + `bat`)
 The shell integrates modern CLI utilities to turn generic lists into rich visual interfaces.
