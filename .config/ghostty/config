@@ -35,7 +35,8 @@ clipboard-write = allow
 # === Hotkeys & Window Management ===
 # Global dropdown (Quake-style) Quick Terminal from anywhere in macOS
 keybind = global:cmd+shift+d=toggle_quick_terminal
-quick-terminal-size = 50%
+quick-terminal-size = 70%
+
 
 
 # Custom panel splitting controls (Vim-aligned splits)
