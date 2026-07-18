@@ -1,0 +1,8 @@
+# Copy to ~/.config/git/local.gitconfig (not tracked in this repo)
+#   mkdir -p ~/.config/git
+#   cp agents/config/git.local.example ~/.config/git/local.gitconfig
+#   # then edit name/email
+
+[user]
+	name = Your Name
+	email = you@example.com

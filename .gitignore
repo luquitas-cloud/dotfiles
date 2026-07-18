@@ -4,5 +4,15 @@
 *.local
 .backup-*/
 
-# Machine-local zsh additions
+# Machine-local shell / secrets (never publish)
 .config/zsh/local.zsh
+.config/zsh/op-keys.local.zsh
+
+# Private agent inventory and generated install artifacts
+agents/law/workspace.private.md
+agents/law/.AGENTS.assembled.md
+agents/workspace/*.private.md
+agents/**/*.private.md
+
+# Local git identity (name/email) - use agents/config/git.local.example
+# Lives outside the repo at ~/.config/git/local.gitconfig by default

@@ -1,21 +1,37 @@
 # dotfiles
 
-Lucas's personal macOS dotfiles. Flat home-mirror layout — repo tree matches `$HOME`.
+Lucas's personal macOS dotfiles. Flat home-mirror layout - repo tree matches `$HOME` for shell files, plus a portable **agent pack**.
 
 ## Install
 
     git clone <repo> ~/dotfiles
     ~/dotfiles/install.sh
 
-`install.sh` is idempotent — already-correct symlinks are skipped; existing files are
-moved to `~/dotfiles/.backup-YYYYMMDD-HHMMSS/` before being replaced.
+`install.sh` is idempotent - already-correct shell symlinks are skipped; existing shell files are moved to `~/dotfiles/.backup-YYYYMMDD-HHMMSS/` before being replaced. It also runs `agents/install.sh` to wire Grok / Codex / Claude.
+
+### Agent pack only (new machine or repair)
+
+    ~/dotfiles/agents/install.sh
+
+Or tell any coding agent: read `agents/BOOTSTRAP.md` and implement it.
 
 ## Tracked files
 
 - `.zshrc`, `.zprofile`, `.gitconfig`
 - `.config/ghostty/config`
 - `.config/mise/config.toml`
-- `.config/zsh/op-keys.zsh` — 1Password-backed API key loader, sourced from `.zshrc`
+- `.config/zsh/op-keys.zsh` - 1Password-backed API key loader, sourced from `.zshrc`
+- `agents/` - portable machine law, per-runtime spaces, shared skills, bootstrap (see `agents/README.md`)
+
+## Public repository safety
+
+This repo is intended to be **public**. Tracked files must not contain:
+
+- API keys, tokens, recovery codes, or 1Password item paths  
+- Real git name/email (use `~/.config/git/local.gitconfig`)  
+- Private product inventory, client names, or work codenames (use `agents/law/workspace.private.md`)  
+
+See `agents/README.md` (Public vs private) and `.gitignore`.
 
 ## Keyboard Layout & Shell Features
 

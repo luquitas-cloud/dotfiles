@@ -1,6 +1,10 @@
-[user]
-	name = redacted
-	email = redacted@users.noreply.github.com
+# Public git defaults. Identity lives in a local include (not this repo).
+#   mkdir -p ~/.config/git
+#   cp ~/dotfiles/agents/config/git.local.example ~/.config/git/local.gitconfig
+#   edit name/email there
+
+[include]
+	path = ~/.config/git/local.gitconfig
 [init]
 	defaultBranch = main
 [pull]
@@ -17,4 +21,3 @@
 	autoSetupRemote = true
 [alias]
 	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
-

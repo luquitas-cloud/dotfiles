@@ -38,3 +38,14 @@ done
 if [ "$backup_made" = 1 ]; then
   echo "Backups in: $BACKUP"
 fi
+
+# Portable agent pack (machine law, runtime wrappers, shared skills)
+if [ -x "$DOTFILES/agents/install.sh" ]; then
+  echo ""
+  echo "=== agents pack ==="
+  "$DOTFILES/agents/install.sh"
+elif [ -f "$DOTFILES/agents/install.sh" ]; then
+  echo ""
+  echo "=== agents pack ==="
+  bash "$DOTFILES/agents/install.sh"
+fi

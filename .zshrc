@@ -1,22 +1,20 @@
+path_prepend_once() {
+  [ -d "$1" ] || return 0
+  case ":$PATH:" in
+    *":$1:"*) ;;
+    *) export PATH="$1:$PATH" ;;
+  esac
+}
+
 # Modern CLI aliases
 alias ls='eza --icons --git'
 alias ll='eza -l --icons --git --header'
 alias la='eza -la --icons --git'
-# Disabled — break scripts that expect POSIX behavior:
+# Disabled - break scripts that expect POSIX behavior:
 #   alias cat='bat --paging=never'
 #   alias find='fd'
 #   alias grep='rg'
 alias top='btop'
-
-opencode() {
-  (
-    export XDG_CONFIG_HOME="$HOME/code/personal/opencode/.xdg/config"
-    export XDG_CACHE_HOME="$HOME/code/personal/opencode/.xdg/cache"
-    export XDG_DATA_HOME="$HOME/code/personal/opencode/.xdg/data"
-    export XDG_STATE_HOME="$HOME/code/personal/opencode/.xdg/state"
-    cd "$HOME/code/personal/opencode" && ./node_modules/.bin/opencode "$@"
-  )
-}
 
 # History
 HISTSIZE=50000
@@ -42,7 +40,7 @@ export FZF_DEFAULT_OPTS="
 "
 
 
-# bat — inherit terminal palette
+# bat - inherit terminal palette
 export BAT_THEME="ansi"
 
 # API keys from 1Password (cached per session)
@@ -51,11 +49,16 @@ export BAT_THEME="ansi"
 # Machine-local overrides (not tracked)
 [ -f ~/.config/zsh/local.zsh ] && source ~/.config/zsh/local.zsh
 
+# Tool paths added by installers. Keep these idempotent so nested agent shells
+# do not duplicate PATH entries.
+path_prepend_once "$HOME/.local/bin"
+
 eval "$(mise activate zsh)"
-
-# Added by Antigravity
-export PATH="/Users/lucas/.antigravity/antigravity/bin:$PATH"
+unset -f path_prepend_once
 
 
-# Added by Antigravity CLI installer
-export PATH="/Users/lucas/.local/bin:$PATH"
+# >>> grok installer >>>
+export PATH="$HOME/.grok/bin:$PATH"
+fpath=(~/.grok/completions/zsh $fpath)
+autoload -Uz compinit && compinit -C
+# <<< grok installer <<<

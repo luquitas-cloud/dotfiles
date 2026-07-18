@@ -1,6 +1,9 @@
 # 1Password-backed API keys with per-session caching.
 # Requires the 1Password desktop app signed in + `op` CLI authorized.
 # Cache TTL: 8h. Cache lives at /tmp/op-cache-$UID (mode 0600).
+#
+# PUBLIC-SAFE: no real vault item paths in this file.
+# Put real _op_load lines in ~/.config/zsh/op-keys.local.zsh (gitignored).
 
 _op_cache="/tmp/op-cache-$UID"
 
@@ -26,10 +29,15 @@ _op_load() {
   export "$var=$val"
 }
 
-_op_load ANTHROPIC_API_KEY "op://Vault/Item/credential"
-# Add more as needed:
-# _op_load OPENAI_API_KEY "op://Vault/Item/credential"
-# _op_load GROQ_API_KEY   "op://Vault/Item/credential"
+# Machine-local loads (not in public git):
+#   ~/.config/zsh/op-keys.local.zsh
+# Example lines for that file:
+#   _op_load SOME_API_KEY "op://Vault/Item/credential"
+
+if [ -f "$HOME/.config/zsh/op-keys.local.zsh" ]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.config/zsh/op-keys.local.zsh"
+fi
 
 unset _op_cache
 unfunction _op_load
