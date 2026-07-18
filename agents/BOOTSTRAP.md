@@ -1,6 +1,6 @@
 # Bootstrap: new machine
 
-**Audience:** Lucas or any coding agent on a fresh Mac.
+**Audience:** The operator or any coding agent on a fresh Mac.
 
 **Goal:** Wire Grok, Codex, and Claude to the portable pack so machine law, runtimes, and shared skills load correctly.
 
@@ -8,7 +8,7 @@
 
 1. `git` available.
 2. This pack exists at `~/dotfiles/agents` (full `dotfiles` clone preferred).
-3. Optional but recommended: shell already installed via `~/dotfiles/install.sh`.
+3. No existing unmanaged file occupies an install target, or the operator has explicitly approved `--replace` after inspection.
 
 If `~/dotfiles` is missing:
 
@@ -41,41 +41,48 @@ Never put vault item paths, emails, client names, or private product lists into 
 
 1. **Read** `~/dotfiles/agents/README.md` and `~/dotfiles/agents/law/AGENTS.md`.
 2. Ensure private overlays exist (above) if this is the operator's personal machine.
-3. **Run** (do not invent paths):
+3. **Dry-run and install** (do not invent paths):
 
    ```bash
-   bash ~/dotfiles/agents/install.sh
+   bash ~/dotfiles/install.sh --dry-run
+   bash ~/dotfiles/install.sh
    ```
 
-4. **Verify** install output shows `ok` / `linked` / `copied` for:
+4. **Verify** install output shows `ok` or `installed` for:
    - `~/.codex/AGENTS.md`
    - `~/.grok/AGENTS.md`
    - `~/.claude/CLAUDE.md`
    - `~/.claude/hooks/guard.sh`
    - `~/.claude/skills`
    - `~/code/AGENTS.md` (and personal/work containers)
-5. **Confirm law content** is non-empty:
+5. **Run the complete checker:**
 
    ```bash
-   wc -l ~/.codex/AGENTS.md ~/.grok/AGENTS.md ~/.claude/CLAUDE.md
-   head -5 ~/.codex/AGENTS.md
+   bash ~/dotfiles/check.sh
    ```
 
-6. **Install agent CLIs/apps** if missing (Grok, Codex, Claude Code). Then re-run `install.sh`.
-7. **Secrets:** 1Password CLI + `op-keys.local.zsh` only. Never copy secrets into the pack.
-8. **Products:** clone product repos under `~/code/personal/` and `~/code/work/`. Each product keeps its own `AGENTS.md`.
-9. **Codex trust (optional):** trust product roots under `$HOME/code/...`, not random Documents folders.
-10. **Report:** what was linked, what tools are missing, any path that failed.
+6. **Provision missing terminal dependencies** when needed for the requested workflow:
+
+   ```bash
+   brew bundle --file ~/dotfiles/Brewfile
+   ```
+
+7. **Install missing agent CLIs/apps** when needed for the requested workflow. They are vendor-managed and intentionally not downloaded by the dotfiles installer. Avoid surprise broad machine upgrades, then re-run `install.sh` and `check.sh`.
+8. **Secrets:** 1Password CLI + `op-keys.local.zsh` only. Never copy secrets into the pack.
+9. **Products:** clone product repos under `~/code/personal/` and `~/code/work/`. Each product keeps its own `AGENTS.md`.
+10. **Codex trust (optional):** trust product roots under `$HOME/code/...`, not random Documents folders.
+11. **Report:** what was installed, what tools are missing, any path that failed.
 
 ## Human one-liner
 
 ```bash
-~/dotfiles/install.sh && ~/dotfiles/agents/install.sh
+~/dotfiles/install.sh && ~/dotfiles/check.sh
 ```
 
 ## Do not
 
 - Create parallel machine law files that fork `law/AGENTS.md`.
+- Create backup or quarantine directories during installation.
 - Put recovery keys, API tokens, emails, client names, or private product inventories into **tracked** pack files.
 - Commit `workspace.private.md`, `op-keys.local.zsh`, or `local.gitconfig`.
 - Treat `~/Documents/Codex/*` session folders as product roots.

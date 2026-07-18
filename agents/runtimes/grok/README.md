@@ -5,28 +5,29 @@
 | Path | Role |
 |------|------|
 | `~/.grok/` | Tool home (sessions, config, bundled skills) |
-| `~/.grok/AGENTS.md` | Global rules - **symlink** to pack `law/AGENTS.md` |
+| `~/.grok/AGENTS.md` | Global rules - assembled copy of public law and the private map |
+| `~/.grok/hooks/guard.sh` | Shared command guard (symlink into pack) |
+| `~/.grok/hooks/command-guard.json` | Native Grok PreToolUse hook definition (symlink into pack) |
 | `~/.grok/skills/` | User skills installed by Grok / you |
 | `~/.grok/bundled/skills/` | Vendor bundled skills |
 | `~/dotfiles/agents/runtimes/grok/` | Portable notes for this runtime |
-| `~/dotfiles/agents/skills/shared/` | Shared skills (added to Grok skills paths on install) |
+| `~/dotfiles/agents/skills/shared/` | Shared source exposed through `~/.agents/skills` |
 
 ## Expected config (`~/.grok/config.toml`)
 
-Prefer:
+Portable baseline (installer enforces these keys under `[ui]`):
 
-- `permission_mode = "ask"` (or stricter) for day-to-day safety
-- `yolo = false`
+- `yolo = true`
+- `permission_mode = "always-approve"`
 
-Install may append:
+Hard stops stay in the shared command guard (native `~/.grok/hooks/` plus Claude-compat discovery). Unrelated config keys are preserved. Mode stays `0600`.
 
-```toml
-[skills]
-paths = ["$HOME/dotfiles/agents/skills/shared"]
-```
+## Skills
+
+Shared portable skills install to `~/.agents/skills` → `dotfiles/agents/skills/shared`. Grok discovers that open-agent path. Grok-only skills remain under `~/.grok/skills/` and bundled.
 
 ## Clarifications
 
 - Default terminal agent for multi-file and machine meta work.
 - When started from `~`, still obey machine law and `cd` into product roots before product edits.
-- Do not rewrite `~/.grok/AGENTS.md` as a real file - keep the symlink (re-run pack `install.sh` if an updater breaks it).
+- Do not edit `~/.grok/AGENTS.md` directly. Edit the pack law and re-run `install.sh`.

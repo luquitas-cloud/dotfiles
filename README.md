@@ -1,19 +1,46 @@
 # dotfiles
 
-Lucas's personal macOS dotfiles. Flat home-mirror layout - repo tree matches `$HOME` for shell files, plus a portable **agent pack**.
+Personal macOS dotfiles. The repository mirrors `$HOME` for shell files and includes a portable agent pack shared by Codex, Claude, and Grok.
 
 ## Install
 
     git clone <repo> ~/dotfiles
     ~/dotfiles/install.sh
 
-`install.sh` is idempotent - already-correct shell symlinks are skipped; existing shell files are moved to `~/dotfiles/.backup-YYYYMMDD-HHMMSS/` before being replaced. It also runs `agents/install.sh` to wire Grok / Codex / Claude.
+`install.sh` is idempotent and creates no backups. It installs missing links, updates files already managed by this repository, and refuses unmanaged collisions. Inspect any collision before using the explicit `--replace` mode.
+
+```bash
+~/dotfiles/install.sh --dry-run
+~/dotfiles/install.sh
+~/dotfiles/check.sh
+```
+
+Read-only verification is always available:
+
+```bash
+~/dotfiles/install.sh --check
+~/dotfiles/check.sh
+```
 
 ### Agent pack only (new machine or repair)
 
     ~/dotfiles/agents/install.sh
 
 Or tell any coding agent: read `agents/BOOTSTRAP.md` and implement it.
+
+## Provisioning
+
+The installer never downloads or upgrades packages. `Brewfile` is the explicit package manifest for shell and verification dependencies:
+
+```bash
+brew bundle --file ~/dotfiles/Brewfile
+```
+
+Scoped package and workflow commands such as `brew install`, `brew bundle`, `npm ci`, and `npx` are allowed when the task requires them. Avoid surprise broad machine upgrades. Codex, Claude, Grok, authentication, private overlays, and application data may still require one-time vendor login or secure restore steps.
+
+## Build and verification policy
+
+This is a shell and configuration repository, not a Node project. Its canonical verification command is `~/dotfiles/check.sh`; there is no `npm` or `npx` build to invent here. The portable command guard allows normal package, build, test, and deployment workflows while retaining narrow hard stops for destructive or irreversible commands.
 
 ## Tracked files
 
@@ -56,6 +83,6 @@ The shell integrates modern CLI utilities to turn generic lists into rich visual
 *   **`Alt + C` (Fuzzy Folder Jumping):** Fuzzy search all directories. The side preview panel runs `eza` showing git status, file structure, and sizes of the highlighted folder. Press `Enter` to instantly `cd` into it.
 *   **`** + Tab` (Command Completion):** Type any command (e.g. `cat **` or `cd **`) and press `Tab` to trigger fuzzy completions with live side panel previews.
 
-### 🔑 Secret Key Caching (`op-keys.zsh`)
-Loads API keys securely from 1Password CLI (`op`) and caches them under `0600` permissions inside `/tmp/op-cache-$UID` with an 8-hour cache TTL to bypass continuous 1Password authorizations in new terminals.
+### Secret Key Caching (`op-keys.zsh`)
 
+Loads API keys from 1Password CLI (`op`) and caches shell-escaped exports under the user's private macOS temporary directory. The cache directory is `0700`, the cache file is `0600`, symlinks are rejected, and entries expire after 8 hours.

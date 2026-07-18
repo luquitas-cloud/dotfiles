@@ -1,3 +1,4 @@
+<!-- managed-by: dotfiles-agent-pack -->
 # Agent Instructions - `~/code/work`
 
 Container for work products. Not a product root.

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "bash \"$HOME/.cursor/hooks/guard.sh\""
+      }
+    ]
+  }
+}

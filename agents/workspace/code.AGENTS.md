@@ -1,3 +1,4 @@
+<!-- managed-by: dotfiles-agent-pack -->
 # Agent Instructions - `~/code`
 
 This directory is a **container**, not a product.

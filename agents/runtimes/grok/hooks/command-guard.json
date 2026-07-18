@@ -1,0 +1,18 @@
+{
+  "description": "Portable machine policy managed by ~/dotfiles/agents/install.sh.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.grok/hooks/guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Enforcing portable machine policy"
+          }
+        ]
+      }
+    ]
+  }
+}
