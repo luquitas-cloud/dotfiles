@@ -1,3 +1,4 @@
+<!-- managed-by: dotfiles-agent-pack -->
 # Machine Law (global)
 
 Portable source: `~/dotfiles/agents/law/AGENTS.md`  
@@ -5,6 +6,21 @@ Installed load targets: `~/.codex/AGENTS.md`, `~/.grok/AGENTS.md`
 Claude enters via `~/.claude/CLAUDE.md` (thin wrapper).
 
 This file is **machine-wide only** and is safe to publish. Product architecture lives in each repo's `AGENTS.md`. Optional private map: `workspace.private.md` (gitignored; merged at install).
+
+## Machine Contract
+
+The portable pack has four separate data classes:
+
+| Class | Source | Portability rule |
+|------|--------|------------------|
+| Public machine configuration | `~/dotfiles` | Tracked and reproducible |
+| Private machine metadata | `agents/**/*.private.md` | Restored separately, never committed |
+| Secrets and credentials | 1Password, local key loaders, runtime auth stores | Re-authenticate or restore through the secret manager |
+| Generated state | Sessions, caches, logs, indexes, memories | Runtime-owned and not treated as configuration |
+
+All supported agents receive the same machine law and shared portable skills. Runtime adapters may differ because Codex, Claude, and Grok use different configuration formats, but they must enforce the same safety outcomes.
+
+`~/dotfiles/install.sh` is the only supported machine installer. It must be idempotent, must refuse unmanaged collisions by default, must not create backups, and must provide read-only `--check` and `--dry-run` modes.
 
 ## Writing Style
 
@@ -39,6 +55,8 @@ Home is not a product root. Repo `AGENTS.md` is product law.
 
 ## Instruction Hierarchy
 
+Platform, runtime, organization, and system policies always remain above user-controlled files. Within the user-controlled instruction layer:
+
 1. Direct user instructions for the current task  
 2. Repo-root `AGENTS.md` (and deeper scoped `AGENTS.md`)  
 3. Repo docs linked from that `AGENTS.md`  
@@ -49,7 +67,7 @@ Durable knowledge belongs in git-tracked public files under `~/dotfiles/agents` 
 
 ## Agents On This Machine
 
-Primary (interchangeable; separate session stores):
+Primary agents share policy and portable skills but keep separate runtime state and session stores:
 
 | Agent | Runtime home | Pack space | Role |
 |-------|--------------|------------|------|
@@ -63,13 +81,27 @@ Each runtime has its own pack space for clarifications, guardrails, and install 
 
 ## Autonomy And Guardrails
 
-High autonomy is intentional (solo operator). Still:
+High autonomy is the portable baseline (solo operator). Permission prompts stay off; hard stops live in shared hooks and this law.
 
-- Ask before irreversible, security-sensitive, or publicly visible actions.
+| Runtime | High-autonomy setting | Shared hard stop |
+|---------|----------------------|------------------|
+| **Grok** | `[ui] yolo = true`, `permission_mode = "always-approve"` | `~/.grok/hooks/` + Claude-compat hooks |
+| **Codex** | `approval_policy = "never"`, `sandbox_mode = "danger-full-access"` | `~/.codex/hooks.json` |
+| **Claude** | `permissions.defaultMode = "bypassPermissions"` | `~/.claude/settings.json` PreToolUse |
+| **Cursor** (secondary) | vendor UI settings | `~/.cursor/hooks.json` |
+
+Shared command guard source: `~/dotfiles/agents/policy/command-guard.sh` (linked into every runtime hooks dir). Shared skills source: `~/dotfiles/agents/skills/shared/` (linked to `~/.agents/skills` and `~/.claude/skills`; Grok discovers the open-agent path).
+
+Still obey as behavioral law (even when auto-approved):
+
+- Prefer the least destructive option that satisfies the request.
 - Protected: `~/.ssh`, agent homes (`~/.codex`, `~/.grok`, `~/.claude`), `~/.config`, LaunchAgents, disks, `/etc`, routing, firewall.
-- Prefer the least destructive option.
 - No backup/quarantine copies unless the user asks.
-- Claude Bash guard: `~/.claude/hooks/guard.sh` (blocks force-push, push to main, `rm -rf`, etc.).
+- Simulate first for destructive or broad changes and verify health afterward.
+- Scoped package and workflow commands such as `brew install`, `brew bundle`, `npm ci`, and `npx` are allowed under yolo; still avoid surprise broad upgrades of the machine without a clear need.
+- Resolve exact targets before destructive commands. Never use broad home-directory or workspace-root deletion.
+- The shared guard hard-stops only destructive/irreversible actions (force-push, direct or implicit push to main, bare push, `reset --hard`, `clean -f`, `branch -D`, `rm -rf`, force-kill, disk/system mutation, `curl|sh`, infra destroy, protected path writes). It is not a package or workflow gate.
+- Hooks are defense in depth, not a substitute for judgment or this law.
 
 ## Git And Delivery
 
@@ -77,6 +109,7 @@ High autonomy is intentional (solo operator). Still:
 - Never commit secrets, real `.env` values, recovery keys, or password exports.
 - Do not commit directly to `main` for live public sites unless the user explicitly overrides.
 - Run the repo's check/lint/test scripts before claiming done when code changed.
+- For changes to this dotfiles repository, run `~/dotfiles/check.sh` before claiming done.
 
 ## Secrets
 
@@ -88,9 +121,9 @@ High autonomy is intentional (solo operator). Still:
 
 | Scope | Location |
 |-------|----------|
-| Shared (portable, Grok + Claude) | `~/dotfiles/agents/skills/shared/` |
+| Shared portable source (Codex + Grok + Claude) | `~/dotfiles/agents/skills/shared/` |
+| Open agent user path (Codex) | `~/.agents/skills/` (wired to shared source) |
 | Grok user | `~/.grok/skills/` (+ bundled under `~/.grok/bundled/`) |
-| Codex user | `~/.codex/skills/` |
 | Claude user | `~/.claude/skills/` (wired to shared on install) |
 | Product | repo-documented skill dirs |
 
@@ -103,8 +136,9 @@ Registry: `~/dotfiles/agents/skills/README.md`.
    - `agents/law/workspace.private.example.md` → `workspace.private.md`  
    - `agents/config/git.local.example` → `~/.config/git/local.gitconfig`  
    - optional key loads → `~/.config/zsh/op-keys.local.zsh`  
-3. Tell any agent: read `~/dotfiles/agents/BOOTSTRAP.md` and run `install.sh`.  
-4. Install agent CLIs; re-run `agents/install.sh`.  
+3. Run `~/dotfiles/install.sh`.
+4. Run `~/dotfiles/check.sh`.
+5. Install missing agent CLIs when needed for the requested workflow, avoid surprise broad machine upgrades, then re-run the installer and checker.
 
 Pack index: `~/dotfiles/agents/README.md`.
 

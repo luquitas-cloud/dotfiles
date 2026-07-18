@@ -1,188 +1,586 @@
 #!/usr/bin/env bash
-# Wire tool homes to the portable agent pack. Idempotent. Safe to re-run.
-# Public pack + optional private overlays (never commit private overlays).
+# Install and verify the portable agent pack. Safe, idempotent, and fail-closed.
 set -euo pipefail
+umask 077
 
-PACK="$(cd "$(dirname "$0")" && pwd)"
-HOME_DIR="${HOME}"
+PACK=$(cd "$(dirname "$0")" && pwd)
+HOME_DIR=${HOME:?HOME must be set}
 LAW_PUBLIC="$PACK/law/AGENTS.md"
 LAW_PRIVATE="$PACK/law/workspace.private.md"
+ASSEMBLED="$PACK/law/.AGENTS.assembled.md"
 SHARED_SKILLS="$PACK/skills/shared"
 CLAUDE_SRC="$PACK/runtimes/claude/CLAUDE.md"
-GUARD_SRC="$PACK/runtimes/claude/hooks/guard.sh"
-ASSEMBLED="$PACK/law/.AGENTS.assembled.md"  # gitignored generated file
+GUARD_SRC="$PACK/policy/command-guard.sh"
+CODEX_HOOKS_SRC="$PACK/runtimes/codex/hooks.json"
+GROK_HOOKS_SRC="$PACK/runtimes/grok/hooks/command-guard.json"
+CURSOR_HOOKS_SRC="$PACK/runtimes/cursor/hooks.json"
+CLAUDE_SETTINGS_MERGER="$PACK/scripts/merge-claude-settings.js"
+GIT_LOCAL="$HOME_DIR/.config/git/local.gitconfig"
+WORKSPACE_CODE="$PACK/workspace/code.AGENTS.md"
+WORKSPACE_PERSONAL="$PACK/workspace/personal.AGENTS.md"
+WORKSPACE_PERSONAL_PRIVATE="$PACK/workspace/personal.private.md"
+WORKSPACE_WORK="$PACK/workspace/work.AGENTS.md"
+WORKSPACE_WORK_PRIVATE="$PACK/workspace/work.private.md"
+MANAGED_MARKER='managed-by: dotfiles-agent-pack'
+PRIVATE_RUNTIME_FILES=(
+  "$HOME_DIR/.claude/settings.local.json"
+)
+
+MODE=install
+REPLACE=0
+
+usage() {
+  cat <<'EOF'
+Usage: install.sh [--check] [--dry-run] [--replace]
+
+  no option   Install missing files and update files already managed by this pack.
+  --check     Read-only verification of sources, installed files, links, and policy.
+  --dry-run   Show the changes an install would make without writing anything.
+  --replace   Explicitly replace unmanaged file or symlink collisions. Directories
+              are never removed. No backup copies are created.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --check)
+      [ "$MODE" = install ] || { usage >&2; exit 2; }
+      MODE=check
+      ;;
+    --dry-run)
+      [ "$MODE" = install ] || { usage >&2; exit 2; }
+      MODE=dry-run
+      ;;
+    --replace) REPLACE=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [ "$MODE" = check ] && [ "$REPLACE" -eq 1 ]; then
+  usage >&2
+  exit 2
+fi
 
 log() { printf '%s\n' "$*"; }
 ok() { log "ok        $1"; }
-linked() { log "linked    $1"; }
-copied() { log "copied    $1"; }
-skip() { log "skip      $1 ($2)"; }
+planned() { log "plan      $1"; }
+installed() { log "installed $1"; }
 warn() { log "warn      $1"; }
+fail() { log "FAIL      $1" >&2; return 1; }
 
-link_force() {
-  local src="$1" dst="$2"
-  mkdir -p "$(dirname "$dst")"
-  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
-    ok "$dst"
-    return 0
-  fi
-  if [ -e "$dst" ] || [ -L "$dst" ]; then
-    rm -f "$dst"
-  fi
-  ln -s "$src" "$dst"
-  linked "$dst -> $src"
+require_file() {
+  [ -f "$1" ] && [ -r "$1" ] || fail "missing or unreadable source: $1"
 }
 
-write_file() {
-  # Always replace destination as a real file. Never write through a symlink
-  # (that would corrupt pack sources if dst previously linked into the pack).
+require_dir() {
+  [ -d "$1" ] && [ -r "$1" ] || fail "missing or unreadable directory: $1"
+}
+
+for required in "$LAW_PUBLIC" "$CLAUDE_SRC" "$GUARD_SRC" "$CODEX_HOOKS_SRC" \
+  "$GROK_HOOKS_SRC" "$CURSOR_HOOKS_SRC" "$CLAUDE_SETTINGS_MERGER" \
+  "$WORKSPACE_CODE" "$WORKSPACE_PERSONAL" "$WORKSPACE_WORK"; do
+  require_file "$required"
+done
+require_dir "$SHARED_SKILLS"
+
+for optional in "$LAW_PRIVATE" "$WORKSPACE_PERSONAL_PRIVATE" "$WORKSPACE_WORK_PRIVATE"; do
+  if [ -e "$optional" ] && [ ! -r "$optional" ]; then
+    fail "unreadable private overlay: $optional"
+  fi
+done
+
+for private_runtime in "${PRIVATE_RUNTIME_FILES[@]}"; do
+  if { [ -e "$private_runtime" ] || [ -L "$private_runtime" ]; } && { [ ! -f "$private_runtime" ] || [ -L "$private_runtime" ]; }; then
+    fail "private runtime config must be a regular file: $private_runtime"
+  fi
+done
+
+emit_combined() {
+  local public="$1" private="$2"
+  cat "$public"
+  if [ -f "$private" ]; then
+    printf '\n\n---\n\n'
+    cat "$private"
+  fi
+}
+
+emit_law() {
+  emit_combined "$LAW_PUBLIC" "$LAW_PRIVATE"
+}
+
+is_managed_file() {
+  [ -f "$1" ] && grep -Fq "$MANAGED_MARKER" "$1" 2>/dev/null
+}
+
+can_replace_file() {
   local src="$1" dst="$2"
-  mkdir -p "$(dirname "$dst")"
-  if [ -L "$dst" ]; then
-    rm -f "$dst"
+  if [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
+    return 0
   fi
   if [ -f "$dst" ] && [ ! -L "$dst" ] && cmp -s "$src" "$dst"; then
-    ok "$dst"
     return 0
   fi
-  cp "$src" "$dst"
-  copied "$dst"
-}
-
-ensure_dir() {
-  mkdir -p "$1"
-  ok "dir $1"
-}
-
-assemble_law() {
-  if [ ! -f "$LAW_PUBLIC" ]; then
-    echo "error: missing machine law at $LAW_PUBLIC" >&2
-    exit 1
+  if is_managed_file "$dst"; then
+    return 0
   fi
-  {
-    cat "$LAW_PUBLIC"
-    if [ -f "$LAW_PRIVATE" ]; then
-      printf '\n\n---\n\n'
-      cat "$LAW_PRIVATE"
-    fi
-  } > "$ASSEMBLED"
-  if [ -f "$LAW_PRIVATE" ]; then
-    log "assembled private workspace map into machine law"
+  if [ -L "$dst" ]; then
+    case "$(readlink "$dst")" in
+      "$PACK"/*) return 0 ;;
+    esac
+  fi
+  [ "$REPLACE" -eq 1 ]
+}
+
+preflight_file() {
+  local src="$1" dst="$2" derived="${3:-0}"
+  if [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
+    return
+  fi
+  if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+    fail "refusing to replace directory: $dst"
+  fi
+  if [ "$derived" -eq 1 ]; then
+    [ -f "$dst" ] && [ ! -L "$dst" ] && return
+    fail "derived configuration target must be a regular file: $dst"
+  fi
+  can_replace_file "$src" "$dst" || fail "unmanaged collision at $dst; inspect it, then use --replace only if replacement is intended"
+}
+
+preflight_link() {
+  local src="$1" dst="$2" current
+  if [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
+    return
+  fi
+  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ] && [ -e "$dst" ]; then
+    return
+  fi
+  if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+    fail "refusing to replace directory: $dst"
+  fi
+  if [ -L "$dst" ]; then
+    current=$(readlink "$dst")
+    case "$current" in
+      "$PACK"/*) return ;;
+      *) [ "$REPLACE" -eq 1 ] || fail "unmanaged symlink collision at $dst -> $current" ;;
+    esac
   else
-    warn "no workspace.private.md - using public skeleton only (copy from workspace.private.example.md)"
+    [ "$REPLACE" -eq 1 ] || fail "unmanaged file collision at $dst"
   fi
 }
 
-# --- preflight ---
-if [ ! -f "$CLAUDE_SRC" ]; then
-  echo "error: missing Claude wrapper at $CLAUDE_SRC" >&2
-  exit 1
+apply_file() {
+  local src="$1" dst="$2" mode="$3" derived="${4:-0}" tmp
+  mkdir -p "$(dirname "$dst")"
+  if [ -f "$dst" ] && [ ! -L "$dst" ] && cmp -s "$src" "$dst"; then
+    chmod "$mode" "$dst"
+    ok "$dst"
+    return
+  fi
+  if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+    fail "refusing to replace directory: $dst"
+  fi
+  if { [ -e "$dst" ] || [ -L "$dst" ]; } && [ "$derived" -ne 1 ]; then
+    can_replace_file "$src" "$dst" || fail "unmanaged collision at $dst; inspect it, then use --replace only if replacement is intended"
+  fi
+  tmp=$(mktemp "$(dirname "$dst")/.agent-pack.XXXXXX")
+  if ! cp "$src" "$tmp" || ! chmod "$mode" "$tmp"; then
+    [ ! -e "$tmp" ] || unlink "$tmp"
+    fail "unable to stage replacement for $dst"
+  fi
+  if [ -L "$dst" ] && ! unlink "$dst"; then
+    unlink "$tmp"
+    fail "unable to unlink existing symlink: $dst"
+  fi
+  if ! mv -f "$tmp" "$dst"; then
+    [ ! -e "$tmp" ] || unlink "$tmp"
+    fail "unable to install staged replacement: $dst"
+  fi
+  installed "$dst"
+}
+
+apply_link() {
+  local src="$1" dst="$2" current tmp
+  mkdir -p "$(dirname "$dst")"
+  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ] && [ -e "$dst" ]; then
+    ok "$dst -> $src"
+    return
+  fi
+  if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+    fail "refusing to replace directory: $dst"
+  fi
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    if [ -L "$dst" ]; then
+      current=$(readlink "$dst")
+      case "$current" in
+        "$PACK"/*) ;;
+        *) [ "$REPLACE" -eq 1 ] || fail "unmanaged symlink collision at $dst -> $current" ;;
+      esac
+    else
+      [ "$REPLACE" -eq 1 ] || fail "unmanaged file collision at $dst"
+    fi
+  fi
+  tmp=$(mktemp "$(dirname "$dst")/.agent-link.XXXXXX")
+  unlink "$tmp"
+  if ! ln -s "$src" "$tmp"; then
+    fail "unable to stage symlink for $dst"
+  fi
+  if [ -L "$dst" ] && ! unlink "$dst"; then
+    unlink "$tmp"
+    fail "unable to unlink existing symlink: $dst"
+  fi
+  if ! mv -f "$tmp" "$dst"; then
+    [ ! -L "$tmp" ] || unlink "$tmp"
+    fail "unable to install staged symlink: $dst"
+  fi
+  installed "$dst -> $src"
+}
+
+prepare_claude_settings() {
+  local dst="$1" source="$HOME_DIR/.claude/settings.json" input="-"
+
+  if [ -f "$source" ] && [ ! -L "$source" ]; then
+    input="$source"
+  elif [ -e "$source" ] || [ -L "$source" ]; then
+    fail "Claude settings must be a regular JSON file: $source"
+  fi
+
+  /usr/bin/osascript -l JavaScript "$CLAUDE_SETTINGS_MERGER" "$input" "$dst" >/dev/null || fail "unable to prepare Claude settings from $source"
+  chmod 600 "$dst"
+}
+
+prepare_codex_config() {
+  local dst="$1" source="$HOME_DIR/.codex/config.toml" work="$2"
+
+  if [ -f "$source" ] && [ ! -L "$source" ]; then
+    awk '
+      BEGIN {
+        in_top = 1
+        seen_approval = 0
+        seen_sandbox = 0
+      }
+      function emit_missing() {
+        if (!seen_approval) {
+          print "approval_policy = \"never\""
+          seen_approval = 1
+        }
+        if (!seen_sandbox) {
+          print "sandbox_mode = \"danger-full-access\""
+          seen_sandbox = 1
+        }
+      }
+      in_top && /^[[:space:]]*\[/ {
+        emit_missing()
+        in_top = 0
+        print
+        next
+      }
+      in_top && /^approval_policy[[:space:]]*=/ {
+        if (!seen_approval) print "approval_policy = \"never\""
+        seen_approval = 1
+        next
+      }
+      in_top && /^sandbox_mode[[:space:]]*=/ {
+        if (!seen_sandbox) print "sandbox_mode = \"danger-full-access\""
+        seen_sandbox = 1
+        next
+      }
+      { print }
+      END {
+        if (in_top) emit_missing()
+      }
+    ' "$source" > "$dst"
+  elif [ -e "$source" ] || [ -L "$source" ]; then
+    fail "Codex config must be a regular TOML file: $source"
+  else
+    printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$dst"
+  fi
+  chmod 600 "$dst"
+
+  if command -v codex >/dev/null 2>&1; then
+    mkdir -p "$work/codex-home"
+    cp "$dst" "$work/codex-home/config.toml"
+    CODEX_HOME="$work/codex-home" codex --strict-config --version >/dev/null 2>&1 || fail "candidate Codex config failed strict validation"
+  elif [ -f "$source" ]; then
+    fail "Codex is unavailable, so an existing Codex config cannot be safely rewritten"
+  fi
+}
+
+prepare_grok_config() {
+  local dst="$1" source="$HOME_DIR/.grok/config.toml"
+
+  if [ -f "$source" ] && [ ! -L "$source" ]; then
+    awk '
+      BEGIN {
+        in_ui = 0
+        seen_ui = 0
+        seen_yolo = 0
+        seen_perm = 0
+      }
+      function emit_ui_keys() {
+        if (!seen_yolo) {
+          print "yolo = true"
+          seen_yolo = 1
+        }
+        if (!seen_perm) {
+          print "permission_mode = \"always-approve\""
+          seen_perm = 1
+        }
+      }
+      /^[[:space:]]*\[/ {
+        if (in_ui) emit_ui_keys()
+        in_ui = ($0 ~ /^[[:space:]]*\[ui\][[:space:]]*$/)
+        if (in_ui) seen_ui = 1
+        print
+        next
+      }
+      in_ui && /^yolo[[:space:]]*=/ {
+        if (!seen_yolo) print "yolo = true"
+        seen_yolo = 1
+        next
+      }
+      in_ui && /^permission_mode[[:space:]]*=/ {
+        if (!seen_perm) print "permission_mode = \"always-approve\""
+        seen_perm = 1
+        next
+      }
+      { print }
+      END {
+        if (in_ui) emit_ui_keys()
+        if (!seen_ui) {
+          print ""
+          print "[ui]"
+          print "yolo = true"
+          print "permission_mode = \"always-approve\""
+        }
+      }
+    ' "$source" > "$dst"
+  elif [ -e "$source" ] || [ -L "$source" ]; then
+    fail "Grok config must be a regular TOML file: $source"
+  else
+    printf '[ui]\nyolo = true\npermission_mode = "always-approve"\n' > "$dst"
+  fi
+  chmod 600 "$dst"
+}
+
+check_file() {
+  local label="$1" actual="$2" expected="$3" mode="${4:-}"
+  if [ -f "$actual" ] && [ ! -L "$actual" ] && cmp -s "$actual" "$expected"; then
+    if [ -n "$mode" ] && [ "$(stat -f '%Lp' "$actual" 2>/dev/null || true)" != "$mode" ]; then
+      fail "$label has mode $(stat -f '%Lp' "$actual" 2>/dev/null || printf unknown), expected $mode"
+    else
+      ok "$label"
+    fi
+  else
+    fail "$label"
+  fi
+}
+
+check_generated() {
+  local label="$1" actual="$2" expected="$3" mode="${4:-}"
+  check_file "$label" "$actual" "$expected" "$mode"
+}
+
+check_link() {
+  local label="$1" actual="$2" expected="$3"
+  if [ -L "$actual" ] && [ "$(readlink "$actual")" = "$expected" ] && [ -e "$actual" ]; then
+    ok "$label"
+  else
+    fail "$label"
+  fi
+}
+
+check_private_mode_if_present() {
+  local label="$1" path="$2"
+  if [ ! -e "$path" ] && [ ! -L "$path" ]; then
+    ok "$label absent"
+  elif [ -f "$path" ] && [ ! -L "$path" ] && [ "$(stat -f '%Lp' "$path" 2>/dev/null || true)" = "600" ]; then
+    ok "$label"
+  else
+    fail "$label"
+  fi
+}
+
+check_private_file_mode() {
+  local label="$1" path="$2"
+  if [ -f "$path" ] && [ ! -L "$path" ] && [ "$(stat -f '%Lp' "$path" 2>/dev/null || true)" = "600" ]; then
+    ok "$label"
+  else
+    fail "$label"
+  fi
+}
+
+check_private_ignored() {
+  local label="$1" path="$2"
+  if git -C "$PACK" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git -C "$PACK" check-ignore -q "$path"; then
+      ok "$label"
+    else
+      fail "$label"
+    fi
+  else
+    warn "$label not checked because the pack is outside a Git worktree"
+  fi
+}
+
+make_stage() {
+  local stage="$1"
+  emit_law > "$stage/law.md"
+  cp "$CLAUDE_SRC" "$stage/claude.md"
+  cp "$WORKSPACE_CODE" "$stage/code.md"
+  emit_combined "$WORKSPACE_PERSONAL" "$WORKSPACE_PERSONAL_PRIVATE" > "$stage/personal.md"
+  emit_combined "$WORKSPACE_WORK" "$WORKSPACE_WORK_PRIVATE" > "$stage/work.md"
+  prepare_claude_settings "$stage/claude-settings.json"
+  prepare_codex_config "$stage/codex-config.toml" "$stage"
+  prepare_grok_config "$stage/grok-config.toml"
+  chmod 600 "$stage/law.md" "$stage/personal.md" "$stage/work.md"
+  chmod 644 "$stage/claude.md" "$stage/code.md"
+}
+
+preflight_all() {
+  local stage="$1" git_local="$HOME_DIR/.config/git/local.gitconfig"
+  preflight_file "$stage/law.md" "$ASSEMBLED" 1
+  preflight_file "$stage/law.md" "$HOME_DIR/.codex/AGENTS.md"
+  preflight_file "$stage/law.md" "$HOME_DIR/.grok/AGENTS.md"
+  preflight_file "$stage/claude.md" "$HOME_DIR/.claude/CLAUDE.md"
+  preflight_file "$stage/claude-settings.json" "$HOME_DIR/.claude/settings.json" 1
+  preflight_file "$stage/codex-config.toml" "$HOME_DIR/.codex/config.toml" 1
+  preflight_file "$stage/grok-config.toml" "$HOME_DIR/.grok/config.toml" 1
+  preflight_link "$GUARD_SRC" "$HOME_DIR/.claude/hooks/guard.sh"
+  preflight_link "$GUARD_SRC" "$HOME_DIR/.codex/hooks/guard.sh"
+  preflight_link "$GUARD_SRC" "$HOME_DIR/.grok/hooks/guard.sh"
+  preflight_link "$GUARD_SRC" "$HOME_DIR/.cursor/hooks/guard.sh"
+  preflight_link "$CODEX_HOOKS_SRC" "$HOME_DIR/.codex/hooks.json"
+  preflight_link "$GROK_HOOKS_SRC" "$HOME_DIR/.grok/hooks/command-guard.json"
+  preflight_link "$CURSOR_HOOKS_SRC" "$HOME_DIR/.cursor/hooks.json"
+  preflight_link "$SHARED_SKILLS" "$HOME_DIR/.claude/skills"
+  preflight_link "$SHARED_SKILLS" "$HOME_DIR/.agents/skills"
+  preflight_file "$stage/code.md" "$HOME_DIR/code/AGENTS.md"
+  preflight_file "$stage/personal.md" "$HOME_DIR/code/personal/AGENTS.md"
+  preflight_file "$stage/work.md" "$HOME_DIR/code/work/AGENTS.md"
+  if { [ -e "$git_local" ] || [ -L "$git_local" ]; } && { [ ! -f "$git_local" ] || [ -L "$git_local" ]; }; then
+    fail "Git identity target must be a regular file: $git_local"
+  fi
+}
+
+run_check() (
+  local stage
+  stage=$(mktemp -d "${TMPDIR:-/tmp}/agent-pack-check.XXXXXX")
+  trap 'find "$stage" -depth -delete 2>/dev/null || true' EXIT
+  make_stage "$stage"
+
+  log "Agent pack check"
+  check_generated "generated machine law" "$ASSEMBLED" "$stage/law.md" 600
+  check_generated "Codex machine law" "$HOME_DIR/.codex/AGENTS.md" "$stage/law.md" 600
+  check_generated "Grok machine law" "$HOME_DIR/.grok/AGENTS.md" "$stage/law.md" 600
+  check_file "Claude wrapper" "$HOME_DIR/.claude/CLAUDE.md" "$stage/claude.md" 644
+  check_file "Claude settings policy" "$HOME_DIR/.claude/settings.json" "$stage/claude-settings.json" 600
+  check_file "Codex autonomy config" "$HOME_DIR/.codex/config.toml" "$stage/codex-config.toml" 600
+  check_file "Grok autonomy config" "$HOME_DIR/.grok/config.toml" "$stage/grok-config.toml" 600
+  check_link "Claude command guard" "$HOME_DIR/.claude/hooks/guard.sh" "$GUARD_SRC"
+  check_link "Codex command guard" "$HOME_DIR/.codex/hooks/guard.sh" "$GUARD_SRC"
+  check_link "Grok command guard" "$HOME_DIR/.grok/hooks/guard.sh" "$GUARD_SRC"
+  check_link "Cursor command guard" "$HOME_DIR/.cursor/hooks/guard.sh" "$GUARD_SRC"
+  check_link "Codex hooks" "$HOME_DIR/.codex/hooks.json" "$CODEX_HOOKS_SRC"
+  check_link "Grok hooks" "$HOME_DIR/.grok/hooks/command-guard.json" "$GROK_HOOKS_SRC"
+  check_link "Cursor hooks" "$HOME_DIR/.cursor/hooks.json" "$CURSOR_HOOKS_SRC"
+  check_link "Claude shared skills" "$HOME_DIR/.claude/skills" "$SHARED_SKILLS"
+  check_link "Codex open-agent skills" "$HOME_DIR/.agents/skills" "$SHARED_SKILLS"
+  check_private_mode_if_present "Claude local settings private mode" "$HOME_DIR/.claude/settings.local.json"
+  check_private_file_mode "Git local identity private mode" "$GIT_LOCAL"
+  check_file "code container law" "$HOME_DIR/code/AGENTS.md" "$stage/code.md" 644
+  check_file "personal container law" "$HOME_DIR/code/personal/AGENTS.md" "$stage/personal.md" 600
+  check_file "work container law" "$HOME_DIR/code/work/AGENTS.md" "$stage/work.md" 600
+  check_private_ignored "private machine map is gitignored" "$LAW_PRIVATE"
+  check_private_ignored "generated machine law is gitignored" "$ASSEMBLED"
+  check_private_ignored "personal private overlay is gitignored" "$WORKSPACE_PERSONAL_PRIVATE"
+  check_private_ignored "work private overlay is gitignored" "$WORKSPACE_WORK_PRIVATE"
+  "$PACK/tests/guard-tests.sh"
+  log "Agent pack check passed."
+)
+
+if [ "$MODE" = check ]; then
+  run_check
+  exit 0
+fi
+
+STAGE=$(mktemp -d "${TMPDIR:-/tmp}/agent-pack-install.XXXXXX")
+trap 'find "$STAGE" -depth -delete 2>/dev/null || true' EXIT
+make_stage "$STAGE"
+preflight_all "$STAGE"
+
+if [ "$MODE" = dry-run ]; then
+  log "Agent pack dry run"
+  for target in \
+    "$HOME_DIR/.codex/AGENTS.md" "$HOME_DIR/.grok/AGENTS.md" \
+    "$HOME_DIR/.claude/CLAUDE.md" "$HOME_DIR/.claude/settings.json" \
+    "$HOME_DIR/.codex/config.toml" "$HOME_DIR/.grok/config.toml" \
+    "$HOME_DIR/.codex/hooks.json" "$HOME_DIR/.grok/hooks/command-guard.json" \
+    "$HOME_DIR/.cursor/hooks.json" \
+    "$HOME_DIR/.codex/hooks/guard.sh" "$HOME_DIR/.claude/hooks/guard.sh" \
+    "$HOME_DIR/.grok/hooks/guard.sh" "$HOME_DIR/.cursor/hooks/guard.sh" \
+    "$HOME_DIR/.agents/skills" "$HOME_DIR/.claude/skills" \
+    "$HOME_DIR/.claude/settings.local.json (mode 600 if present)" \
+    "$HOME_DIR/code/AGENTS.md" "$HOME_DIR/code/personal/AGENTS.md" "$HOME_DIR/code/work/AGENTS.md"; do
+    planned "$target"
+  done
+  exit 0
 fi
 
 log "Agent pack install"
 log "  pack: $PACK"
 log "  home: $HOME_DIR"
-log ""
 
-ensure_dir "$HOME_DIR/.codex"
-ensure_dir "$HOME_DIR/.grok"
-ensure_dir "$HOME_DIR/.claude"
-ensure_dir "$HOME_DIR/.claude/hooks"
-ensure_dir "$HOME_DIR/code/personal"
-ensure_dir "$HOME_DIR/code/work"
-ensure_dir "$HOME_DIR/.config/git"
-
-# --- assemble public law + optional private map ---
-assemble_law
-
-# Write assembled law into tool homes as real files (not symlinks),
-# so private inventory never needs to live in a published path alone.
-write_file "$ASSEMBLED" "$HOME_DIR/.codex/AGENTS.md"
-write_file "$ASSEMBLED" "$HOME_DIR/.grok/AGENTS.md"
-
-# --- Claude: real file so @../.codex/AGENTS.md resolves from ~/.claude/ ---
-write_file "$CLAUDE_SRC" "$HOME_DIR/.claude/CLAUDE.md"
-
-# --- Claude Bash guard ---
-if [ -f "$GUARD_SRC" ]; then
-  link_force "$GUARD_SRC" "$HOME_DIR/.claude/hooks/guard.sh"
-  chmod +x "$HOME_DIR/.claude/hooks/guard.sh" 2>/dev/null || true
-else
-  warn "no guard.sh in pack"
-fi
-
-# --- shared skills → Claude ---
-link_force "$SHARED_SKILLS" "$HOME_DIR/.claude/skills"
-
-# --- Grok: ensure skills.paths includes shared (append once) ---
-GROK_CFG="$HOME_DIR/.grok/config.toml"
-SHARED_PATH="$HOME_DIR/dotfiles/agents/skills/shared"
-if [ -f "$GROK_CFG" ]; then
-  if grep -q 'dotfiles/agents/skills/shared' "$GROK_CFG" 2>/dev/null; then
-    ok "grok skills.paths already includes shared"
-  else
-    {
-      echo ""
-      echo "# Managed by ~/dotfiles/agents/install.sh — shared portable skills"
-      echo "[skills]"
-      echo "paths = [\"$SHARED_PATH\"]"
-    } >> "$GROK_CFG"
-    linked "grok config.toml skills.paths"
-  fi
-else
-  skip "grok config.toml" "missing - install Grok then re-run"
-fi
-
-# --- git local identity template (never overwrite existing) ---
-GIT_LOCAL="$HOME_DIR/.config/git/local.gitconfig"
-GIT_EXAMPLE="$PACK/config/git.local.example"
-if [ ! -f "$GIT_LOCAL" ] && [ -f "$GIT_EXAMPLE" ]; then
-  cp "$GIT_EXAMPLE" "$GIT_LOCAL"
-  copied "$GIT_LOCAL (edit name/email)"
-elif [ -f "$GIT_LOCAL" ]; then
-  ok "git local identity present"
-else
-  skip "git local identity" "no example file"
-fi
-
-# --- workspace container AGENTS (public templates only) ---
-write_file "$PACK/workspace/code.AGENTS.md" "$HOME_DIR/code/AGENTS.md"
-write_file "$PACK/workspace/personal.AGENTS.md" "$HOME_DIR/code/personal/AGENTS.md"
-write_file "$PACK/workspace/work.AGENTS.md" "$HOME_DIR/code/work/AGENTS.md"
-
-# Optional private container notes (gitignored if you create them)
-if [ -f "$PACK/workspace/personal.private.md" ]; then
-  write_file "$PACK/workspace/personal.private.md" "$HOME_DIR/code/personal/AGENTS.md"
-fi
-if [ -f "$PACK/workspace/work.private.md" ]; then
-  write_file "$PACK/workspace/work.private.md" "$HOME_DIR/code/work/AGENTS.md"
-fi
-
-# --- verify ---
-log ""
-log "Verify:"
-for f in \
-  "$HOME_DIR/.codex/AGENTS.md" \
-  "$HOME_DIR/.grok/AGENTS.md" \
-  "$HOME_DIR/.claude/CLAUDE.md" \
-  "$HOME_DIR/code/AGENTS.md"
-do
-  if [ -e "$f" ] && [ -s "$f" ]; then
-    log "  pass  $f ($(wc -l < "$f" | tr -d ' ') lines)"
-  else
-    log "  FAIL  $f"
-  fi
+for dir in "$HOME_DIR/.codex/hooks" "$HOME_DIR/.grok/hooks" "$HOME_DIR/.claude/hooks" \
+  "$HOME_DIR/.cursor/hooks" "$HOME_DIR/.agents" \
+  "$HOME_DIR/code/personal" "$HOME_DIR/code/work" "$HOME_DIR/.config/git"; do
+  mkdir -p "$dir"
 done
 
 if [ -f "$LAW_PRIVATE" ]; then
-  if grep -q 'Private product inventory' "$HOME_DIR/.codex/AGENTS.md" 2>/dev/null; then
-    log "  pass  private map merged into installed law"
-  else
-    log "  FAIL  private map not found in installed law"
-  fi
+  chmod 600 "$LAW_PRIVATE"
+fi
+for private in "$WORKSPACE_PERSONAL_PRIVATE" "$WORKSPACE_WORK_PRIVATE"; do
+  [ ! -f "$private" ] || chmod 600 "$private"
+done
+for private_runtime in "${PRIVATE_RUNTIME_FILES[@]}"; do
+  [ ! -f "$private_runtime" ] || chmod 600 "$private_runtime"
+done
+
+apply_file "$STAGE/law.md" "$ASSEMBLED" 600 1
+apply_file "$STAGE/law.md" "$HOME_DIR/.codex/AGENTS.md" 600
+apply_file "$STAGE/law.md" "$HOME_DIR/.grok/AGENTS.md" 600
+apply_file "$STAGE/claude.md" "$HOME_DIR/.claude/CLAUDE.md" 644
+apply_file "$STAGE/claude-settings.json" "$HOME_DIR/.claude/settings.json" 600 1
+apply_file "$STAGE/codex-config.toml" "$HOME_DIR/.codex/config.toml" 600 1
+apply_file "$STAGE/grok-config.toml" "$HOME_DIR/.grok/config.toml" 600 1
+
+apply_link "$GUARD_SRC" "$HOME_DIR/.claude/hooks/guard.sh"
+apply_link "$GUARD_SRC" "$HOME_DIR/.codex/hooks/guard.sh"
+apply_link "$GUARD_SRC" "$HOME_DIR/.grok/hooks/guard.sh"
+apply_link "$GUARD_SRC" "$HOME_DIR/.cursor/hooks/guard.sh"
+apply_link "$CODEX_HOOKS_SRC" "$HOME_DIR/.codex/hooks.json"
+apply_link "$GROK_HOOKS_SRC" "$HOME_DIR/.grok/hooks/command-guard.json"
+apply_link "$CURSOR_HOOKS_SRC" "$HOME_DIR/.cursor/hooks.json"
+apply_link "$SHARED_SKILLS" "$HOME_DIR/.claude/skills"
+apply_link "$SHARED_SKILLS" "$HOME_DIR/.agents/skills"
+
+apply_file "$STAGE/code.md" "$HOME_DIR/code/AGENTS.md" 644
+apply_file "$STAGE/personal.md" "$HOME_DIR/code/personal/AGENTS.md" 600
+apply_file "$STAGE/work.md" "$HOME_DIR/code/work/AGENTS.md" 600
+
+if [ ! -e "$GIT_LOCAL" ]; then
+  cp "$PACK/config/git.local.example" "$GIT_LOCAL"
+  chmod 600 "$GIT_LOCAL"
+  installed "$GIT_LOCAL (replace placeholder identity values)"
+else
+  chmod 600 "$GIT_LOCAL"
+  ok "$GIT_LOCAL"
 fi
 
 log ""
-log "Done. Next: open a new agent session so it reloads global rules."
-log "Public pack only is git-safe. Private: workspace.private.md, op-keys.local.zsh, git local.gitconfig"
-log "New machine docs: $PACK/BOOTSTRAP.md"
+run_check
+log ""
+log "Done. Start a new agent session so every runtime reloads the installed policy."
+log "Codex may require one-time hook review with /hooks after a hook definition changes."

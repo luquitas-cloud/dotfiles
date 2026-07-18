@@ -1,3 +1,4 @@
+<!-- managed-by: dotfiles-agent-pack -->
 # Agent Instructions - `~/code/personal`
 
 Container for personal products. Not a product root.

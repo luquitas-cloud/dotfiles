@@ -10,11 +10,14 @@
 | `~/.claude/skills` | Symlink to `dotfiles/agents/skills/shared` |
 | `~/dotfiles/agents/runtimes/claude/` | Portable sources for this runtime |
 
-## Guardrails
+## Autonomy and guardrails
 
-`hooks/guard.sh` blocks high-risk Bash when Claude runs with elevated permissions: force-push, push to main/master, `git reset --hard`, `rm -rf`, package publish, etc.
+Installer enforces:
 
-Settings for hooks live in `~/.claude/settings.json` (machine-local; not fully mirrored in the pack). After a new machine bootstrap, confirm PreToolUse still points at `~/.claude/hooks/guard.sh`.
+- `permissions.defaultMode = "bypassPermissions"` (high autonomy / always-approve)
+- Managed `PreToolUse` hook on Bash → `~/.claude/hooks/guard.sh`
+
+The shared command guard hard-stops only destructive/irreversible actions (force-push, direct or implicit push to main, bare push, destructive Git cleanup, `rm -rf`, force-kill, disk/system mutation, `curl|sh`, infra destroy, and protected-path mutation). Scoped package commands and normal deploys are allowed. Unrelated user settings are preserved. Grok also discovers this Claude hook path for compatibility.
 
 ## Clarifications
 
