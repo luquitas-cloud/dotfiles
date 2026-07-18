@@ -71,7 +71,11 @@ unset CLAUDE_CHECK
 
 if "$DOTFILES/agents/tests/guard-tests.sh"; then pass "portable command guard behavior"; else fail "portable command guard behavior"; fi
 if "$DOTFILES/agents/tests/install-safety-tests.sh"; then pass "fail-closed installer behavior"; else fail "fail-closed installer behavior"; fi
-if "$DOTFILES/agents/login-check.sh"; then pass "interactive-login agent invariants"; else fail "interactive-login agent invariants"; fi
+if [ "$SOURCE_ONLY" -eq 0 ]; then
+  if "$DOTFILES/agents/login-check.sh"; then pass "interactive-login agent invariants"; else fail "interactive-login agent invariants"; fi
+else
+  pass "interactive-login agent invariants skipped for source-only verification"
+fi
 
 if command -v shellcheck >/dev/null 2>&1; then
   if shellcheck "$DOTFILES/install.sh" "$DOTFILES/check.sh" "$DOTFILES/agents/install.sh" \
