@@ -9,18 +9,20 @@ LAW_PUBLIC="$PACK/law/AGENTS.md"
 LAW_PRIVATE="$PACK/law/workspace.private.md"
 ASSEMBLED="$PACK/law/.AGENTS.assembled.md"
 SHARED_SKILLS="$PACK/skills/shared"
+STATUS_SRC="$PACK/status.sh"
 CLAUDE_SRC="$PACK/runtimes/claude/CLAUDE.md"
+GEMINI_SRC="$PACK/runtimes/gemini/GEMINI.md"
+GEMINI_POLICY_SRC="$PACK/runtimes/gemini/policy.toml"
 GUARD_SRC="$PACK/policy/command-guard.sh"
 CODEX_HOOKS_SRC="$PACK/runtimes/codex/hooks.json"
 GROK_HOOKS_SRC="$PACK/runtimes/grok/hooks/command-guard.json"
 CURSOR_HOOKS_SRC="$PACK/runtimes/cursor/hooks.json"
 CLAUDE_SETTINGS_MERGER="$PACK/scripts/merge-claude-settings.js"
+GEMINI_SETTINGS_MERGER="$PACK/scripts/merge-gemini-settings.js"
 GIT_LOCAL="$HOME_DIR/.config/git/local.gitconfig"
 WORKSPACE_CODE="$PACK/workspace/code.AGENTS.md"
 WORKSPACE_PERSONAL="$PACK/workspace/personal.AGENTS.md"
-WORKSPACE_PERSONAL_PRIVATE="$PACK/workspace/personal.private.md"
 WORKSPACE_WORK="$PACK/workspace/work.AGENTS.md"
-WORKSPACE_WORK_PRIVATE="$PACK/workspace/work.private.md"
 MANAGED_MARKER='managed-by: dotfiles-agent-pack'
 PRIVATE_RUNTIME_FILES=(
   "$HOME_DIR/.claude/settings.local.json"
@@ -78,18 +80,18 @@ require_dir() {
   [ -d "$1" ] && [ -r "$1" ] || fail "missing or unreadable directory: $1"
 }
 
-for required in "$LAW_PUBLIC" "$CLAUDE_SRC" "$GUARD_SRC" "$CODEX_HOOKS_SRC" \
+for required in "$LAW_PUBLIC" "$STATUS_SRC" "$CLAUDE_SRC" "$GEMINI_SRC" "$GEMINI_POLICY_SRC" \
+  "$GUARD_SRC" "$CODEX_HOOKS_SRC" \
   "$GROK_HOOKS_SRC" "$CURSOR_HOOKS_SRC" "$CLAUDE_SETTINGS_MERGER" \
+  "$GEMINI_SETTINGS_MERGER" \
   "$WORKSPACE_CODE" "$WORKSPACE_PERSONAL" "$WORKSPACE_WORK"; do
   require_file "$required"
 done
 require_dir "$SHARED_SKILLS"
 
-for optional in "$LAW_PRIVATE" "$WORKSPACE_PERSONAL_PRIVATE" "$WORKSPACE_WORK_PRIVATE"; do
-  if [ -e "$optional" ] && [ ! -r "$optional" ]; then
-    fail "unreadable private overlay: $optional"
-  fi
-done
+if [ -e "$LAW_PRIVATE" ] && [ ! -r "$LAW_PRIVATE" ]; then
+  fail "unreadable private overlay: $LAW_PRIVATE"
+fi
 
 for private_runtime in "${PRIVATE_RUNTIME_FILES[@]}"; do
   if { [ -e "$private_runtime" ] || [ -L "$private_runtime" ]; } && { [ ! -f "$private_runtime" ] || [ -L "$private_runtime" ]; }; then
@@ -247,6 +249,19 @@ prepare_claude_settings() {
   fi
 
   /usr/bin/osascript -l JavaScript "$CLAUDE_SETTINGS_MERGER" "$input" "$dst" >/dev/null || fail "unable to prepare Claude settings from $source"
+  chmod 600 "$dst"
+}
+
+prepare_gemini_settings() {
+  local dst="$1" source="$HOME_DIR/.gemini/settings.json" input="-"
+
+  if [ -f "$source" ] && [ ! -L "$source" ]; then
+    input="$source"
+  elif [ -e "$source" ] || [ -L "$source" ]; then
+    fail "Gemini settings must be a regular JSON file: $source"
+  fi
+
+  /usr/bin/osascript -l JavaScript "$GEMINI_SETTINGS_MERGER" "$input" "$dst" >/dev/null || fail "unable to prepare Gemini settings from $source"
   chmod 600 "$dst"
 }
 
@@ -428,14 +443,16 @@ make_stage() {
   local stage="$1"
   emit_law > "$stage/law.md"
   cp "$CLAUDE_SRC" "$stage/claude.md"
+  cp "$GEMINI_SRC" "$stage/gemini.md"
   cp "$WORKSPACE_CODE" "$stage/code.md"
-  emit_combined "$WORKSPACE_PERSONAL" "$WORKSPACE_PERSONAL_PRIVATE" > "$stage/personal.md"
-  emit_combined "$WORKSPACE_WORK" "$WORKSPACE_WORK_PRIVATE" > "$stage/work.md"
+  cp "$WORKSPACE_PERSONAL" "$stage/personal.md"
+  cp "$WORKSPACE_WORK" "$stage/work.md"
   prepare_claude_settings "$stage/claude-settings.json"
+  prepare_gemini_settings "$stage/gemini-settings.json"
   prepare_codex_config "$stage/codex-config.toml" "$stage"
   prepare_grok_config "$stage/grok-config.toml"
-  chmod 600 "$stage/law.md" "$stage/personal.md" "$stage/work.md"
-  chmod 644 "$stage/claude.md" "$stage/code.md"
+  chmod 600 "$stage/law.md"
+  chmod 644 "$stage/claude.md" "$stage/gemini.md" "$stage/code.md" "$stage/personal.md" "$stage/work.md"
 }
 
 preflight_all() {
@@ -444,18 +461,24 @@ preflight_all() {
   preflight_file "$stage/law.md" "$HOME_DIR/.codex/AGENTS.md"
   preflight_file "$stage/law.md" "$HOME_DIR/.grok/AGENTS.md"
   preflight_file "$stage/claude.md" "$HOME_DIR/.claude/CLAUDE.md"
+  preflight_file "$stage/gemini.md" "$HOME_DIR/.gemini/GEMINI.md"
   preflight_file "$stage/claude-settings.json" "$HOME_DIR/.claude/settings.json" 1
+  preflight_file "$stage/gemini-settings.json" "$HOME_DIR/.gemini/settings.json" 1
   preflight_file "$stage/codex-config.toml" "$HOME_DIR/.codex/config.toml" 1
   preflight_file "$stage/grok-config.toml" "$HOME_DIR/.grok/config.toml" 1
   preflight_link "$GUARD_SRC" "$HOME_DIR/.claude/hooks/guard.sh"
   preflight_link "$GUARD_SRC" "$HOME_DIR/.codex/hooks/guard.sh"
   preflight_link "$GUARD_SRC" "$HOME_DIR/.grok/hooks/guard.sh"
   preflight_link "$GUARD_SRC" "$HOME_DIR/.cursor/hooks/guard.sh"
+  preflight_link "$GUARD_SRC" "$HOME_DIR/.gemini/hooks/guard.sh"
   preflight_link "$CODEX_HOOKS_SRC" "$HOME_DIR/.codex/hooks.json"
   preflight_link "$GROK_HOOKS_SRC" "$HOME_DIR/.grok/hooks/command-guard.json"
   preflight_link "$CURSOR_HOOKS_SRC" "$HOME_DIR/.cursor/hooks.json"
+  preflight_link "$GEMINI_POLICY_SRC" "$HOME_DIR/.gemini/policies/dotfiles-agent-pack.toml"
   preflight_link "$SHARED_SKILLS" "$HOME_DIR/.claude/skills"
   preflight_link "$SHARED_SKILLS" "$HOME_DIR/.agents/skills"
+  preflight_link "$SHARED_SKILLS" "$HOME_DIR/.cursor/skills"
+  preflight_link "$STATUS_SRC" "$HOME_DIR/.local/bin/agent-status"
   preflight_file "$stage/code.md" "$HOME_DIR/code/AGENTS.md"
   preflight_file "$stage/personal.md" "$HOME_DIR/code/personal/AGENTS.md"
   preflight_file "$stage/work.md" "$HOME_DIR/code/work/AGENTS.md"
@@ -475,27 +498,31 @@ run_check() (
   check_generated "Codex machine law" "$HOME_DIR/.codex/AGENTS.md" "$stage/law.md" 600
   check_generated "Grok machine law" "$HOME_DIR/.grok/AGENTS.md" "$stage/law.md" 600
   check_file "Claude wrapper" "$HOME_DIR/.claude/CLAUDE.md" "$stage/claude.md" 644
+  check_file "Gemini wrapper" "$HOME_DIR/.gemini/GEMINI.md" "$stage/gemini.md" 644
   check_file "Claude settings policy" "$HOME_DIR/.claude/settings.json" "$stage/claude-settings.json" 600
+  check_file "Gemini settings policy" "$HOME_DIR/.gemini/settings.json" "$stage/gemini-settings.json" 600
   check_file "Codex autonomy config" "$HOME_DIR/.codex/config.toml" "$stage/codex-config.toml" 600
   check_file "Grok autonomy config" "$HOME_DIR/.grok/config.toml" "$stage/grok-config.toml" 600
   check_link "Claude command guard" "$HOME_DIR/.claude/hooks/guard.sh" "$GUARD_SRC"
   check_link "Codex command guard" "$HOME_DIR/.codex/hooks/guard.sh" "$GUARD_SRC"
   check_link "Grok command guard" "$HOME_DIR/.grok/hooks/guard.sh" "$GUARD_SRC"
   check_link "Cursor command guard" "$HOME_DIR/.cursor/hooks/guard.sh" "$GUARD_SRC"
+  check_link "Gemini command guard" "$HOME_DIR/.gemini/hooks/guard.sh" "$GUARD_SRC"
   check_link "Codex hooks" "$HOME_DIR/.codex/hooks.json" "$CODEX_HOOKS_SRC"
   check_link "Grok hooks" "$HOME_DIR/.grok/hooks/command-guard.json" "$GROK_HOOKS_SRC"
   check_link "Cursor hooks" "$HOME_DIR/.cursor/hooks.json" "$CURSOR_HOOKS_SRC"
+  check_link "Gemini autonomy policy" "$HOME_DIR/.gemini/policies/dotfiles-agent-pack.toml" "$GEMINI_POLICY_SRC"
   check_link "Claude shared skills" "$HOME_DIR/.claude/skills" "$SHARED_SKILLS"
   check_link "Codex open-agent skills" "$HOME_DIR/.agents/skills" "$SHARED_SKILLS"
+  check_link "Cursor shared skills" "$HOME_DIR/.cursor/skills" "$SHARED_SKILLS"
+  check_link "agent-status command" "$HOME_DIR/.local/bin/agent-status" "$STATUS_SRC"
   check_private_mode_if_present "Claude local settings private mode" "$HOME_DIR/.claude/settings.local.json"
   check_private_file_mode "Git local identity private mode" "$GIT_LOCAL"
   check_file "code container law" "$HOME_DIR/code/AGENTS.md" "$stage/code.md" 644
-  check_file "personal container law" "$HOME_DIR/code/personal/AGENTS.md" "$stage/personal.md" 600
-  check_file "work container law" "$HOME_DIR/code/work/AGENTS.md" "$stage/work.md" 600
+  check_file "personal container law" "$HOME_DIR/code/personal/AGENTS.md" "$stage/personal.md" 644
+  check_file "work container law" "$HOME_DIR/code/work/AGENTS.md" "$stage/work.md" 644
   check_private_ignored "private machine map is gitignored" "$LAW_PRIVATE"
   check_private_ignored "generated machine law is gitignored" "$ASSEMBLED"
-  check_private_ignored "personal private overlay is gitignored" "$WORKSPACE_PERSONAL_PRIVATE"
-  check_private_ignored "work private overlay is gitignored" "$WORKSPACE_WORK_PRIVATE"
   "$PACK/tests/guard-tests.sh"
   log "Agent pack check passed."
 )
@@ -515,12 +542,14 @@ if [ "$MODE" = dry-run ]; then
   for target in \
     "$HOME_DIR/.codex/AGENTS.md" "$HOME_DIR/.grok/AGENTS.md" \
     "$HOME_DIR/.claude/CLAUDE.md" "$HOME_DIR/.claude/settings.json" \
+    "$HOME_DIR/.gemini/GEMINI.md" "$HOME_DIR/.gemini/settings.json" \
     "$HOME_DIR/.codex/config.toml" "$HOME_DIR/.grok/config.toml" \
     "$HOME_DIR/.codex/hooks.json" "$HOME_DIR/.grok/hooks/command-guard.json" \
-    "$HOME_DIR/.cursor/hooks.json" \
+    "$HOME_DIR/.cursor/hooks.json" "$HOME_DIR/.gemini/policies/dotfiles-agent-pack.toml" \
     "$HOME_DIR/.codex/hooks/guard.sh" "$HOME_DIR/.claude/hooks/guard.sh" \
-    "$HOME_DIR/.grok/hooks/guard.sh" "$HOME_DIR/.cursor/hooks/guard.sh" \
-    "$HOME_DIR/.agents/skills" "$HOME_DIR/.claude/skills" \
+    "$HOME_DIR/.grok/hooks/guard.sh" "$HOME_DIR/.cursor/hooks/guard.sh" "$HOME_DIR/.gemini/hooks/guard.sh" \
+    "$HOME_DIR/.agents/skills" "$HOME_DIR/.claude/skills" "$HOME_DIR/.cursor/skills" \
+    "$HOME_DIR/.local/bin/agent-status" \
     "$HOME_DIR/.claude/settings.local.json (mode 600 if present)" \
     "$HOME_DIR/code/AGENTS.md" "$HOME_DIR/code/personal/AGENTS.md" "$HOME_DIR/code/work/AGENTS.md"; do
     planned "$target"
@@ -533,7 +562,8 @@ log "  pack: $PACK"
 log "  home: $HOME_DIR"
 
 for dir in "$HOME_DIR/.codex/hooks" "$HOME_DIR/.grok/hooks" "$HOME_DIR/.claude/hooks" \
-  "$HOME_DIR/.cursor/hooks" "$HOME_DIR/.agents" \
+  "$HOME_DIR/.cursor/hooks" "$HOME_DIR/.gemini/hooks" "$HOME_DIR/.gemini/policies" \
+  "$HOME_DIR/.agents" "$HOME_DIR/.local/bin" \
   "$HOME_DIR/code/personal" "$HOME_DIR/code/work" "$HOME_DIR/.config/git"; do
   mkdir -p "$dir"
 done
@@ -541,9 +571,6 @@ done
 if [ -f "$LAW_PRIVATE" ]; then
   chmod 600 "$LAW_PRIVATE"
 fi
-for private in "$WORKSPACE_PERSONAL_PRIVATE" "$WORKSPACE_WORK_PRIVATE"; do
-  [ ! -f "$private" ] || chmod 600 "$private"
-done
 for private_runtime in "${PRIVATE_RUNTIME_FILES[@]}"; do
   [ ! -f "$private_runtime" ] || chmod 600 "$private_runtime"
 done
@@ -552,7 +579,9 @@ apply_file "$STAGE/law.md" "$ASSEMBLED" 600 1
 apply_file "$STAGE/law.md" "$HOME_DIR/.codex/AGENTS.md" 600
 apply_file "$STAGE/law.md" "$HOME_DIR/.grok/AGENTS.md" 600
 apply_file "$STAGE/claude.md" "$HOME_DIR/.claude/CLAUDE.md" 644
+apply_file "$STAGE/gemini.md" "$HOME_DIR/.gemini/GEMINI.md" 644
 apply_file "$STAGE/claude-settings.json" "$HOME_DIR/.claude/settings.json" 600 1
+apply_file "$STAGE/gemini-settings.json" "$HOME_DIR/.gemini/settings.json" 600 1
 apply_file "$STAGE/codex-config.toml" "$HOME_DIR/.codex/config.toml" 600 1
 apply_file "$STAGE/grok-config.toml" "$HOME_DIR/.grok/config.toml" 600 1
 
@@ -560,15 +589,19 @@ apply_link "$GUARD_SRC" "$HOME_DIR/.claude/hooks/guard.sh"
 apply_link "$GUARD_SRC" "$HOME_DIR/.codex/hooks/guard.sh"
 apply_link "$GUARD_SRC" "$HOME_DIR/.grok/hooks/guard.sh"
 apply_link "$GUARD_SRC" "$HOME_DIR/.cursor/hooks/guard.sh"
+apply_link "$GUARD_SRC" "$HOME_DIR/.gemini/hooks/guard.sh"
 apply_link "$CODEX_HOOKS_SRC" "$HOME_DIR/.codex/hooks.json"
 apply_link "$GROK_HOOKS_SRC" "$HOME_DIR/.grok/hooks/command-guard.json"
 apply_link "$CURSOR_HOOKS_SRC" "$HOME_DIR/.cursor/hooks.json"
+apply_link "$GEMINI_POLICY_SRC" "$HOME_DIR/.gemini/policies/dotfiles-agent-pack.toml"
 apply_link "$SHARED_SKILLS" "$HOME_DIR/.claude/skills"
 apply_link "$SHARED_SKILLS" "$HOME_DIR/.agents/skills"
+apply_link "$SHARED_SKILLS" "$HOME_DIR/.cursor/skills"
+apply_link "$STATUS_SRC" "$HOME_DIR/.local/bin/agent-status"
 
 apply_file "$STAGE/code.md" "$HOME_DIR/code/AGENTS.md" 644
-apply_file "$STAGE/personal.md" "$HOME_DIR/code/personal/AGENTS.md" 600
-apply_file "$STAGE/work.md" "$HOME_DIR/code/work/AGENTS.md" 600
+apply_file "$STAGE/personal.md" "$HOME_DIR/code/personal/AGENTS.md" 644
+apply_file "$STAGE/work.md" "$HOME_DIR/code/work/AGENTS.md" 644
 
 if [ ! -e "$GIT_LOCAL" ]; then
   cp "$PACK/config/git.local.example" "$GIT_LOCAL"

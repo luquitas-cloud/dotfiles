@@ -1,0 +1,7 @@
+# managed-by: dotfiles-agent-pack
+# High autonomy outside plan mode. Shell hard stops remain in the BeforeTool hook.
+[[rule]]
+toolName = "*"
+decision = "allow"
+priority = 900
+modes = ["default", "autoEdit", "yolo"]

@@ -27,12 +27,13 @@ printf '%s\n' "Dotfiles source checks"
 
 if git -C "$DOTFILES" diff --check; then pass "git diff has no whitespace errors"; else fail "git diff whitespace check"; fi
 
-if bash -n "$DOTFILES/install.sh" "$DOTFILES/check.sh" \
-  "$DOTFILES/agents/install.sh" "$DOTFILES/agents/login-check.sh" \
+if bash -n "$DOTFILES/install.sh" "$DOTFILES/bootstrap.sh" "$DOTFILES/check.sh" \
+  "$DOTFILES/agents/install.sh" "$DOTFILES/agents/login-check.sh" "$DOTFILES/agents/status.sh" \
+  "$DOTFILES/agents/private-state.sh" \
   "$DOTFILES/agents/policy/command-guard.sh" \
   "$DOTFILES/agents/runtimes/claude/hooks/guard.sh" \
   "$DOTFILES/agents/tests/guard-tests.sh" "$DOTFILES/agents/tests/install-clean-home.sh" \
-  "$DOTFILES/agents/tests/install-safety-tests.sh"; then
+  "$DOTFILES/agents/tests/install-safety-tests.sh" "$DOTFILES/agents/tests/private-state-tests.sh"; then
   pass "Bash syntax"
 else
   fail "Bash syntax"
@@ -55,6 +56,9 @@ unset dash_pattern
 
 if command -v jq >/dev/null 2>&1; then
   if jq empty "$DOTFILES/agents/runtimes/codex/hooks.json"; then pass "Codex hooks JSON"; else fail "Codex hooks JSON"; fi
+  if jq empty "$DOTFILES/agents/runtimes/grok/hooks/command-guard.json"; then pass "Grok hooks JSON"; else fail "Grok hooks JSON"; fi
+  if jq empty "$DOTFILES/agents/runtimes/cursor/hooks.json"; then pass "Cursor hooks JSON"; else fail "Cursor hooks JSON"; fi
+  if jq empty "$DOTFILES/agents/config/private-state.example.json"; then pass "private-state example JSON"; else fail "private-state example JSON"; fi
 else
   warn "jq unavailable; skipped JSON validation"
 fi
@@ -69,8 +73,19 @@ else
 fi
 unset CLAUDE_CHECK
 
+GEMINI_CHECK=$(mktemp "${TMPDIR:-/tmp}/dotfiles-gemini-settings-check.XXXXXX")
+if /usr/bin/osascript -l JavaScript "$DOTFILES/agents/scripts/merge-gemini-settings.js" - "$GEMINI_CHECK" >/dev/null 2>&1; then
+  unlink "$GEMINI_CHECK"
+  pass "Gemini settings merger"
+else
+  [ ! -e "$GEMINI_CHECK" ] || unlink "$GEMINI_CHECK"
+  fail "Gemini settings merger"
+fi
+unset GEMINI_CHECK
+
 if "$DOTFILES/agents/tests/guard-tests.sh"; then pass "portable command guard behavior"; else fail "portable command guard behavior"; fi
 if "$DOTFILES/agents/tests/install-safety-tests.sh"; then pass "fail-closed installer behavior"; else fail "fail-closed installer behavior"; fi
+if "$DOTFILES/agents/tests/private-state-tests.sh"; then pass "private-state restore behavior"; else fail "private-state restore behavior"; fi
 if [ "$SOURCE_ONLY" -eq 0 ]; then
   if "$DOTFILES/agents/login-check.sh"; then pass "interactive-login agent invariants"; else fail "interactive-login agent invariants"; fi
 else
@@ -78,11 +93,12 @@ else
 fi
 
 if command -v shellcheck >/dev/null 2>&1; then
-  if shellcheck "$DOTFILES/install.sh" "$DOTFILES/check.sh" "$DOTFILES/agents/install.sh" \
-    "$DOTFILES/agents/login-check.sh" "$DOTFILES/agents/policy/command-guard.sh" \
+  if shellcheck "$DOTFILES/install.sh" "$DOTFILES/bootstrap.sh" "$DOTFILES/check.sh" "$DOTFILES/agents/install.sh" \
+    "$DOTFILES/agents/login-check.sh" "$DOTFILES/agents/status.sh" "$DOTFILES/agents/policy/command-guard.sh" \
+    "$DOTFILES/agents/private-state.sh" \
     "$DOTFILES/agents/runtimes/claude/hooks/guard.sh" \
     "$DOTFILES/agents/tests/guard-tests.sh" "$DOTFILES/agents/tests/install-clean-home.sh" \
-    "$DOTFILES/agents/tests/install-safety-tests.sh"; then
+    "$DOTFILES/agents/tests/install-safety-tests.sh" "$DOTFILES/agents/tests/private-state-tests.sh"; then
     pass "ShellCheck"
   else
     fail "ShellCheck"
@@ -105,8 +121,9 @@ if [ "$SOURCE_ONLY" -eq 0 ]; then
   printf '%s\n' "Dotfiles live-machine checks"
 
   if bash "$DOTFILES/install.sh" --check; then pass "installed dotfiles and agent pack"; else fail "installed dotfiles and agent pack"; fi
+  if "$DOTFILES/agents/status.sh" >/dev/null; then pass "portable agent status report"; else fail "portable agent status report"; fi
 
-  for tool in git zsh brew mise op ghostty delta zoxide starship direnv fzf fd bat eza btop rg codex claude grok; do
+  for tool in git zsh brew gh mise op ghostty delta zoxide starship direnv fzf fd bat eza btop rg codex claude grok gemini cursor; do
     if command -v "$tool" >/dev/null 2>&1; then pass "tool available: $tool"; else fail "tool missing: $tool"; fi
   done
 

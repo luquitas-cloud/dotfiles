@@ -110,6 +110,22 @@ run_payload_case allow 'grok-camel-status' \
 run_payload_case allow 'grok-camel-brew' \
   '{"toolName":"run_terminal_command","toolInput":{"command":"brew install shellcheck"}}'
 
+# Gemini snake_case payload (run_shell_command) and structured allow response.
+run_payload_case block 'gemini-snake-rm' \
+  '{"tool_name":"run_shell_command","tool_input":{"command":"rm -rf /tmp/example"}}'
+set +e
+gemini_result=$(printf '%s' \
+  '{"tool_name":"run_shell_command","tool_input":{"command":"git status --short"}}' | \
+  DOTFILES_AGENT_RUNTIME=gemini "$GUARD" 2>&1)
+gemini_rc=$?
+set -e
+if [ "$gemini_rc" -eq 0 ] && [ "$gemini_result" = '{"decision":"allow"}' ]; then
+  printf '  pass  allow gemini structured response\n'
+else
+  printf '  FAIL  expected Gemini allow JSON rc=%s result=%s\n' "$gemini_rc" "$gemini_result"
+  FAILURES=$((FAILURES + 1))
+fi
+
 if [ "$FAILURES" -gt 0 ]; then
   printf 'Guard tests failed: %s\n' "$FAILURES" >&2
   exit 1
