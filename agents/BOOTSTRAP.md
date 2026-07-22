@@ -1,92 +1,132 @@
-# Bootstrap: new machine
+# Bootstrap: new Mac
 
 **Audience:** The operator or any coding agent on a fresh Mac.
 
-**Goal:** Wire Grok, Codex, and Claude to the portable pack so machine law, runtimes, and shared skills load correctly.
+**Outcome:** A full developer Mac with the same public dotfiles, package manifest,
+machine law, shared skills, guardrails, and empirical checks. Private metadata is
+restored from 1Password. Runtime credentials and application sessions are created
+through manual vendor logins.
 
-## Preconditions
+## Data model
 
-1. `git` available.
-2. This pack exists at `~/dotfiles/agents` (full `dotfiles` clone preferred).
-3. No existing unmanaged file occupies an install target, or the operator has explicitly approved `--replace` after inspection.
+| Class | Portable source | Restore behavior |
+|------|-----------------|------------------|
+| Public machine configuration | Public `dotfiles` Git repo | Clone and install |
+| Private machine metadata | One 1Password Secure Note | Pull after 1Password login |
+| Secrets and credentials | 1Password and vendor auth stores | Re-authenticate manually |
+| Generated state | Sessions, caches, logs, memories, indexes | Recreated by runtimes |
 
-If `~/dotfiles` is missing:
+The public and private layers are intentionally separate. Never put product names,
+email, secret references, tokens, or the 1Password item reference in tracked Git.
 
-```bash
-git clone <your-dotfiles-remote> ~/dotfiles
-```
+## One manual installation checkpoint
 
-## Private overlays (required for a useful personal map)
+Install Homebrew once using the official macOS installer:
 
-These are **not** in public git. Create them before or after first install:
+<https://docs.brew.sh/Installation>
 
-```bash
-# Product inventory (merged into machine law at install)
-cp ~/dotfiles/agents/law/workspace.private.example.md \
-   ~/dotfiles/agents/law/workspace.private.md
-# edit workspace.private.md with your real paths
+This is the only manual package installation. The bootstrap deliberately does not
+pipe remote content into a shell to install Homebrew.
 
-# Git identity
-mkdir -p ~/.config/git
-cp ~/dotfiles/agents/config/git.local.example ~/.config/git/local.gitconfig
-# edit name/email
+## Agent procedure
 
-# Optional API key loads from 1Password
-# create ~/.config/zsh/op-keys.local.zsh with _op_load lines only
-```
-
-Never put vault item paths, emails, client names, or private product lists into tracked files.
-
-## Agent procedure (do this in order)
-
-1. **Read** `~/dotfiles/agents/README.md` and `~/dotfiles/agents/law/AGENTS.md`.
-2. Ensure private overlays exist (above) if this is the operator's personal machine.
-3. **Dry-run and install** (do not invent paths):
+1. Clone the public repository to its canonical path:
 
    ```bash
-   bash ~/dotfiles/install.sh --dry-run
-   bash ~/dotfiles/install.sh
+   git clone https://github.com/luquitas-cloud/dotfiles.git ~/dotfiles
    ```
 
-4. **Verify** install output shows `ok` or `installed` for:
-   - `~/.codex/AGENTS.md`
-   - `~/.grok/AGENTS.md`
-   - `~/.claude/CLAUDE.md`
-   - `~/.claude/hooks/guard.sh`
-   - `~/.claude/skills`
-   - `~/code/AGENTS.md` (and personal/work containers)
-5. **Run the complete checker:**
+2. Read `~/dotfiles/agents/README.md` and
+   `~/dotfiles/agents/law/AGENTS.md`.
+
+3. Preview the complete machine operation:
 
    ```bash
-   bash ~/dotfiles/check.sh
+   ~/dotfiles/bootstrap.sh --dry-run
    ```
 
-6. **Provision missing terminal dependencies** when needed for the requested workflow:
+4. Provision the public machine layer:
 
    ```bash
-   brew bundle --file ~/dotfiles/Brewfile
+   ~/dotfiles/bootstrap.sh
    ```
 
-7. **Install missing agent CLIs/apps** when needed for the requested workflow. They are vendor-managed and intentionally not downloaded by the dotfiles installer. Avoid surprise broad machine upgrades, then re-run `install.sh` and `check.sh`.
-8. **Secrets:** 1Password CLI + `op-keys.local.zsh` only. Never copy secrets into the pack.
-9. **Products:** clone product repos under `~/code/personal/` and `~/code/work/`. Each product keeps its own `AGENTS.md`.
-10. **Codex trust (optional):** trust product roots under `$HOME/code/...`, not random Documents folders.
-11. **Report:** what was installed, what tools are missing, any path that failed.
+   This installs missing `Brewfile` entries, mise runtimes, Codex, Claude, Grok,
+   Gemini, Cursor, dotfile links, global law adapters, shared skills, and hooks.
+   It installs missing packages only and does not run a broad machine upgrade.
 
-## Human one-liner
+5. Complete the manual sign-ins printed by the bootstrap:
+
+   ```text
+   1Password desktop and CLI
+   GitHub CLI
+   Codex
+   Claude
+   Grok
+   Gemini
+   Cursor UI
+   ```
+
+6. Restore the encrypted private layer and optionally clone products:
+
+   ```bash
+   ~/dotfiles/bootstrap.sh \
+     --private-item "$DOTFILES_PRIVATE_ITEM" \
+     --clone-products
+   ```
+
+   The item reference is supplied interactively or through the environment and
+   is never stored in the repository. Use `--private-vault` only if needed.
+
+7. Verify the complete contract:
+
+   ```bash
+   ~/dotfiles/bootstrap.sh --check
+   agent-status --verbose
+   ```
+
+   A healthy agent contract ends with `COPACETIC`. Compare the public pack and
+   skills fingerprints between machines. Private maps are excluded intentionally.
+
+## First-time 1Password seed on the source Mac
+
+After signing in to 1Password CLI, create or refresh the encrypted payload directly
+from the current private files and direct product repositories:
 
 ```bash
-~/dotfiles/install.sh && ~/dotfiles/check.sh
+~/dotfiles/agents/private-state.sh push --item "$DOTFILES_PRIVATE_ITEM" --dry-run
+~/dotfiles/agents/private-state.sh push --item "$DOTFILES_PRIVATE_ITEM"
 ```
+
+The push streams directly to a Secure Note. It creates no plaintext archive or
+backup file. The pull allowlists only these destinations:
+
+- `~/dotfiles/agents/law/workspace.private.md`
+- `~/.config/git/local.gitconfig`
+- `~/.config/zsh/op-keys.local.zsh` when present in the payload
+- optional Git clones under `~/code/personal/` and `~/code/work/`
+
+Existing differing files fail closed. Inspect them before explicitly using
+`--replace`. Directories are never replaced and backups are never created.
+
+## Runtime wiring after install
+
+| Runtime | Global law | Shared skills | Hard stop |
+|---------|------------|---------------|-----------|
+| Codex | `~/.codex/AGENTS.md` | `~/.agents/skills` | Codex hook |
+| Claude | `~/.claude/CLAUDE.md` import | `~/.claude/skills` | Claude hook |
+| Grok | `~/.grok/AGENTS.md` | open-agent skills | Grok hook |
+| Gemini | `~/.gemini/GEMINI.md` import | open-agent skills | Gemini hook |
+| Cursor | repo `AGENTS.md` | `~/.cursor/skills` | Cursor hook |
+
+Every path points back to the same tracked public source. Product architecture stays
+inside each product repository's `AGENTS.md`.
 
 ## Do not
 
-- Create parallel machine law files that fork `law/AGENTS.md`.
-- Create backup or quarantine directories during installation.
-- Put recovery keys, API tokens, emails, client names, or private product inventories into **tracked** pack files.
-- Commit `workspace.private.md`, `op-keys.local.zsh`, or `local.gitconfig`.
-- Treat `~/Documents/Codex/*` session folders as product roots.
-
-## After bootstrap
-
-Work from product repos. Machine meta from `~` is fine. Edit global rules only under `~/dotfiles/agents/`.
+- Create parallel global law files that fork `law/AGENTS.md`.
+- Copy runtime auth databases or session folders between Macs.
+- Create backup, quarantine, or migration archives.
+- Commit `workspace.private.md`, `op-keys.local.zsh`, `local.gitconfig`, or a
+  1Password item reference.
+- Treat `~/Documents/` session folders as product roots.

@@ -32,7 +32,7 @@ Prefer:
 
 ## Skills
 
-Codex, Claude, and Grok all support `SKILL.md` packages. The installer links the portable shared source to Codex's documented user path at `~/.agents/skills` and Claude's user path at `~/.claude/skills`; Grok discovers the open-agent path.
+Codex, Claude, Grok, Gemini, and Cursor all support `SKILL.md` packages. The installer links the portable shared source to the open-agent user path at `~/.agents/skills`, Claude's user path at `~/.claude/skills`, and Cursor's user path at `~/.cursor/skills`; Grok and Gemini discover the open-agent path.
 
 After a Codex hook definition changes, review and trust it once with `/hooks`. Codex intentionally invalidates trust when the hook hash changes.
 

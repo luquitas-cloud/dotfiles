@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "files": {
+    "workspace_private_md": "# Private workspace map\n",
+    "git_local_gitconfig": "[user]\n\tname = Your Name\n\temail = you@example.com\n",
+    "op_keys_local_zsh": "# Optional _op_load references only\n"
+  },
+  "products": [
+    {
+      "path": "code/personal/example-product",
+      "repository": "git@github.com:example/example-product.git"
+    }
+  ]
+}

@@ -3,7 +3,8 @@
 
 Portable source: `~/dotfiles/agents/law/AGENTS.md`  
 Installed load targets: `~/.codex/AGENTS.md`, `~/.grok/AGENTS.md`  
-Claude enters via `~/.claude/CLAUDE.md` (thin wrapper).
+Claude enters via `~/.claude/CLAUDE.md`; Gemini enters via
+`~/.gemini/GEMINI.md` (thin wrappers).
 
 This file is **machine-wide only** and is safe to publish. Product architecture lives in each repo's `AGENTS.md`. Optional private map: `workspace.private.md` (gitignored; merged at install).
 
@@ -18,7 +19,9 @@ The portable pack has four separate data classes:
 | Secrets and credentials | 1Password, local key loaders, runtime auth stores | Re-authenticate or restore through the secret manager |
 | Generated state | Sessions, caches, logs, indexes, memories | Runtime-owned and not treated as configuration |
 
-All supported agents receive the same machine law and shared portable skills. Runtime adapters may differ because Codex, Claude, and Grok use different configuration formats, but they must enforce the same safety outcomes.
+Codex, Claude, Grok, and Gemini receive the same machine law and shared portable skills. Cursor receives the same shared skills and command guard, then reads product law from each repo-root `AGENTS.md`; Cursor user rules remain vendor-managed. Runtime adapters may differ because each tool uses a different configuration format, but they must enforce the same safety outcomes.
+
+`agent-status` is the empirical contract report. Its public pack and shared-skills fingerprints must match across machines on the same dotfiles revision. Private workspace maps may differ by machine and are intentionally excluded from those fingerprints.
 
 `~/dotfiles/install.sh` is the only supported machine installer. It must be idempotent, must refuse unmanaged collisions by default, must not create backups, and must provide read-only `--check` and `--dry-run` modes.
 
@@ -61,7 +64,7 @@ Platform, runtime, organization, and system policies always remain above user-co
 2. Repo-root `AGENTS.md` (and deeper scoped `AGENTS.md`)  
 3. Repo docs linked from that `AGENTS.md`  
 4. This machine law file (plus installed private map section)  
-5. Runtime wrappers (`CLAUDE.md`, Cursor rules, runtime README notes) - thin only; must not fork product law  
+5. Runtime wrappers (`CLAUDE.md`, `GEMINI.md`, Cursor rules, runtime README notes) - thin only; must not fork product law
 
 Durable knowledge belongs in git-tracked public files under `~/dotfiles/agents` or a product repo - not chat-only memory. Private machine facts stay in gitignored private overlays.
 
@@ -74,6 +77,7 @@ Primary agents share policy and portable skills but keep separate runtime state 
 | **Grok** | `~/.grok/` | `dotfiles/agents/runtimes/grok/` | Default terminal coding; multi-file; machine tasks |
 | **Codex** (ChatGPT) | `~/.codex/` | `dotfiles/agents/runtimes/codex/` | Planning + agent loops in ChatGPT / Codex CLI |
 | **Claude** | `~/.claude/` | `dotfiles/agents/runtimes/claude/` | Doc-heavy multi-file; alternate coding agent |
+| **Gemini** | `~/.gemini/` | `dotfiles/agents/runtimes/gemini/` | Google terminal agent; multimodal and alternate coding agent |
 
 Secondary: Cursor (`~/.cursor/`, pack `runtimes/cursor/`).
 
@@ -88,9 +92,10 @@ High autonomy is the portable baseline (solo operator). Permission prompts stay 
 | **Grok** | `[ui] yolo = true`, `permission_mode = "always-approve"` | `~/.grok/hooks/` + Claude-compat hooks |
 | **Codex** | `approval_policy = "never"`, `sandbox_mode = "danger-full-access"` | `~/.codex/hooks.json` |
 | **Claude** | `permissions.defaultMode = "bypassPermissions"` | `~/.claude/settings.json` PreToolUse |
+| **Gemini** | user allow policy outside read-only plan mode | `~/.gemini/settings.json` BeforeTool |
 | **Cursor** (secondary) | vendor UI settings | `~/.cursor/hooks.json` |
 
-Shared command guard source: `~/dotfiles/agents/policy/command-guard.sh` (linked into every runtime hooks dir). Shared skills source: `~/dotfiles/agents/skills/shared/` (linked to `~/.agents/skills` and `~/.claude/skills`; Grok discovers the open-agent path).
+Shared command guard source: `~/dotfiles/agents/policy/command-guard.sh` (linked into every runtime hooks dir). Shared skills source: `~/dotfiles/agents/skills/shared/` (linked to `~/.agents/skills`, `~/.claude/skills`, and `~/.cursor/skills`; Grok and Gemini discover the open-agent path).
 
 Still obey as behavioral law (even when auto-approved):
 
@@ -121,24 +126,24 @@ Still obey as behavioral law (even when auto-approved):
 
 | Scope | Location |
 |-------|----------|
-| Shared portable source (Codex + Grok + Claude) | `~/dotfiles/agents/skills/shared/` |
+| Shared portable source (Codex + Grok + Claude + Gemini + Cursor) | `~/dotfiles/agents/skills/shared/` |
 | Open agent user path (Codex) | `~/.agents/skills/` (wired to shared source) |
 | Grok user | `~/.grok/skills/` (+ bundled under `~/.grok/bundled/`) |
 | Claude user | `~/.claude/skills/` (wired to shared on install) |
+| Cursor user | `~/.cursor/skills/` (wired to shared on install) |
+| Gemini user | `~/.agents/skills/` (shared open-agent path) |
 | Product | repo-documented skill dirs |
 
 Registry: `~/dotfiles/agents/skills/README.md`.
 
 ## New Machine / Portability
 
-1. Clone this `dotfiles` repo.  
-2. Copy private templates:  
-   - `agents/law/workspace.private.example.md` → `workspace.private.md`  
-   - `agents/config/git.local.example` → `~/.config/git/local.gitconfig`  
-   - optional key loads → `~/.config/zsh/op-keys.local.zsh`  
-3. Run `~/dotfiles/install.sh`.
-4. Run `~/dotfiles/check.sh`.
-5. Install missing agent CLIs when needed for the requested workflow, avoid surprise broad machine upgrades, then re-run the installer and checker.
+1. Install Homebrew once using the official macOS installer.
+2. Clone this public `dotfiles` repo to `~/dotfiles`.
+3. Run `~/dotfiles/bootstrap.sh` to install missing developer tools and the public agent pack.
+4. Complete manual 1Password, GitHub, agent, and application sign-ins.
+5. Restore private metadata with `agents/private-state.sh pull`; optionally clone products from its encrypted manifest.
+6. Run `~/dotfiles/bootstrap.sh --check` and `agent-status`; compare public fingerprints between machines.
 
 Pack index: `~/dotfiles/agents/README.md`.
 

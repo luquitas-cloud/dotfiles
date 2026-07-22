@@ -82,6 +82,18 @@ printf '%s\n' \
   '    {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash $HOME/.claude/hooks/guard.sh"}]}' \
   '  ]}' \
   '}' > "$TEST_HOME/.claude/settings.json"
+mkdir -p "$TEST_HOME/.gemini"
+# shellcheck disable=SC2016 # intentional literal $HOME inside seeded JSON fixture
+printf '%s\n' \
+  '{' \
+  '  "theme": "keep-me",' \
+  '  "context": {"fileName": "CONTEXT.md"},' \
+  '  "hooks": {"BeforeTool": [' \
+  '    {"matcher": "read_file", "hooks": [{"type": "command", "command": "true"}]},' \
+  '    {"matcher": "run_shell_command", "hooks": [{"type": "command", "command": "bash $HOME/.gemini/hooks/guard.sh"}]},' \
+  '    {"matcher": "run_shell_command", "hooks": [{"type": "command", "command": "bash $HOME/.gemini/hooks/guard.sh"}]}' \
+  '  ]}' \
+  '}' > "$TEST_HOME/.gemini/settings.json"
 HOME="$TEST_HOME" bash "$DOTFILES/install.sh" --replace >/dev/null
 [ -L "$TEST_HOME/.zshrc" ] && [ "$(readlink "$TEST_HOME/.zshrc")" = "$DOTFILES/.zshrc" ] || fail "staged root-link replacement failed"
 top_approval=$(awk '/^[[:space:]]*\[/{exit} /^approval_policy[[:space:]]*=/{print $3}' "$TEST_HOME/.codex/config.toml")
@@ -91,6 +103,12 @@ grep -A2 '^\[profiles.unrestricted\]' "$TEST_HOME/.codex/config.toml" | grep -Fq
 [ "$(/usr/bin/plutil -extract permissions.defaultMode raw -o - "$TEST_HOME/.claude/settings.json")" = "bypassPermissions" ] || fail "Claude bypassPermissions mode was not installed"
 [ "$(grep -cF '.claude/hooks/guard.sh' "$TEST_HOME/.claude/settings.json")" -eq 1 ] || fail "Claude managed hooks were not deduplicated"
 grep -Fq '"matcher": "Read"' "$TEST_HOME/.claude/settings.json" || fail "Claude unrelated hook was not preserved"
+grep -Fq '"theme": "keep-me"' "$TEST_HOME/.gemini/settings.json" || fail "Gemini unrelated setting was not preserved"
+[ "$(grep -cF '.gemini/hooks/guard.sh' "$TEST_HOME/.gemini/settings.json")" -eq 1 ] || fail "Gemini managed hooks were not deduplicated"
+grep -Fq '"CONTEXT.md"' "$TEST_HOME/.gemini/settings.json" || fail "Gemini custom context name was not preserved"
+grep -Fq '"AGENTS.md"' "$TEST_HOME/.gemini/settings.json" || fail "Gemini AGENTS context was not installed"
+grep -Fq '"GEMINI.md"' "$TEST_HOME/.gemini/settings.json" || fail "Gemini context was not installed"
+grep -Fq '"matcher": "read_file"' "$TEST_HOME/.gemini/settings.json" || fail "Gemini unrelated hook was not preserved"
 # Seeded profile already used never/danger-full-access; re-seed restrictive top-level then reinstall.
 printf '%s\n' \
   'approval_policy = "on-request"' \
@@ -112,6 +130,17 @@ printf '%s\n' \
   'yolo = false' \
   'permission_mode = "ask"' \
   'theme = "keep-me"' > "$TEST_HOME/.grok/config.toml"
+# shellcheck disable=SC2016 # intentional literal $HOME inside seeded JSON fixture
+printf '%s\n' \
+  '{' \
+  '  "theme": "keep-me",' \
+  '  "skills": {"enabled": false},' \
+  '  "hooksConfig": {"enabled": false},' \
+  '  "hooks": {"BeforeTool": [' \
+  '    {"matcher": "read_file", "hooks": [{"type": "command", "command": "true"}]},' \
+  '    {"matcher": "run_shell_command", "hooks": [{"type": "command", "command": "bash $HOME/.gemini/hooks/guard.sh"}]}' \
+  '  ]}' \
+  '}' > "$TEST_HOME/.gemini/settings.json"
 HOME="$TEST_HOME" bash "$DOTFILES/install.sh" --replace >/dev/null
 top_approval=$(awk '/^[[:space:]]*\[/{exit} /^approval_policy[[:space:]]*=/{print $3}' "$TEST_HOME/.codex/config.toml")
 top_sandbox=$(awk '/^[[:space:]]*\[/{exit} /^sandbox_mode[[:space:]]*=/{print $3}' "$TEST_HOME/.codex/config.toml")
@@ -121,10 +150,18 @@ grep -A2 '^\[profiles.unrestricted\]' "$TEST_HOME/.codex/config.toml" | grep -Fq
 grep -Fq 'theme = "keep-me"' "$TEST_HOME/.grok/config.toml" || fail "Grok unrelated config was not preserved"
 grep -Eq '^yolo[[:space:]]*=[[:space:]]*true[[:space:]]*$' "$TEST_HOME/.grok/config.toml" || fail "Grok yolo was not installed"
 grep -Eq '^permission_mode[[:space:]]*=[[:space:]]*"always-approve"[[:space:]]*$' "$TEST_HOME/.grok/config.toml" || fail "Grok always-approve was not installed"
+[ "$(/usr/bin/plutil -extract skills.enabled raw -o - "$TEST_HOME/.gemini/settings.json")" = "true" ] || fail "Gemini skills were not enabled"
+[ "$(/usr/bin/plutil -extract hooksConfig.enabled raw -o - "$TEST_HOME/.gemini/settings.json")" = "true" ] || fail "Gemini hooks were not enabled"
+[ "$(grep -cF '.gemini/hooks/guard.sh' "$TEST_HOME/.gemini/settings.json")" -eq 1 ] || fail "Gemini managed hook was not installed exactly once"
 [ -L "$TEST_HOME/.grok/hooks/guard.sh" ] || fail "Grok guard link missing"
 [ -L "$TEST_HOME/.grok/hooks/command-guard.json" ] || fail "Grok hooks link missing"
 [ -L "$TEST_HOME/.cursor/hooks/guard.sh" ] || fail "Cursor guard link missing"
 [ -L "$TEST_HOME/.cursor/hooks.json" ] || fail "Cursor hooks link missing"
+[ -L "$TEST_HOME/.cursor/skills" ] || fail "Cursor shared-skills link missing"
+[ -f "$TEST_HOME/.gemini/GEMINI.md" ] && [ ! -L "$TEST_HOME/.gemini/GEMINI.md" ] || fail "Gemini global wrapper missing"
+[ -L "$TEST_HOME/.gemini/hooks/guard.sh" ] || fail "Gemini guard link missing"
+[ -L "$TEST_HOME/.gemini/policies/dotfiles-agent-pack.toml" ] || fail "Gemini policy link missing"
+[ -L "$TEST_HOME/.local/bin/agent-status" ] || fail "agent-status command link missing"
 HOME="$TEST_HOME" bash "$DOTFILES/install.sh" --check >/dev/null
 pass "explicit replacement preserves profiles and unrelated hooks"
 

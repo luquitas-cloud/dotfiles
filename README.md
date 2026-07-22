@@ -1,19 +1,65 @@
 # dotfiles
 
-Personal macOS dotfiles. The repository mirrors `$HOME` for shell files and includes a portable agent pack shared by Codex, Claude, and Grok.
+Personal macOS machine bootstrap. The repository mirrors `$HOME` for shell files,
+tracks the full Homebrew developer manifest, and carries one portable law and skill
+source for Codex, Claude, Grok, Gemini, and Cursor.
 
-## Install
+## New Mac
 
-    git clone <repo> ~/dotfiles
-    ~/dotfiles/install.sh
+There is one manual installation checkpoint: install Homebrew from the official
+macOS installer at <https://docs.brew.sh/Installation>. Then:
 
-`install.sh` is idempotent and creates no backups. It installs missing links, updates files already managed by this repository, and refuses unmanaged collisions. Inspect any collision before using the explicit `--replace` mode.
+```bash
+git clone https://github.com/luquitas-cloud/dotfiles.git ~/dotfiles
+~/dotfiles/bootstrap.sh
+```
+
+`bootstrap.sh` installs missing Homebrew formulae and apps, installs the tracked
+mise runtimes, installs or verifies Codex, Claude, Grok, Gemini, and Cursor, wires
+the agent pack, and runs the complete checker. It does not upgrade packages that
+are already present. Runtime and application logins remain manual by design.
+
+Read-only previews and verification:
+
+```bash
+~/dotfiles/bootstrap.sh --dry-run
+~/dotfiles/bootstrap.sh --check
+```
+
+### Private state and optional products
+
+Private machine metadata lives in one 1Password Secure Note, never in public Git.
+On the current source machine, sign in to 1Password CLI and seed or refresh it:
+
+```bash
+~/dotfiles/agents/private-state.sh push --item "$DOTFILES_PRIVATE_ITEM"
+```
+
+On a new Mac, after the manual 1Password and GitHub logins:
+
+```bash
+~/dotfiles/bootstrap.sh \
+  --private-item "$DOTFILES_PRIVATE_ITEM" \
+  --clone-products
+```
+
+The encrypted payload restores the private workspace map, Git identity, optional
+1Password key references, and an optional list of product repositories. Product
+cloning is constrained to `~/code/personal/` and `~/code/work/`. Existing files
+or repositories must match; differing targets are refused unless `--replace` is
+explicitly supplied. No backup or quarantine copies are created.
+
+## Dotfiles and agent-pack install only
+
+Use the narrower installer when packages are already provisioned:
 
 ```bash
 ~/dotfiles/install.sh --dry-run
 ~/dotfiles/install.sh
 ~/dotfiles/check.sh
 ```
+
+`install.sh` is idempotent and creates no backups. It installs missing links, updates files already managed by this repository, and refuses unmanaged collisions. Inspect any collision before using the explicit `--replace` mode.
 
 Read-only verification is always available:
 
@@ -28,15 +74,16 @@ Read-only verification is always available:
 
 Or tell any coding agent: read `agents/BOOTSTRAP.md` and implement it.
 
-## Provisioning
+## Provisioning contract
 
-The installer never downloads or upgrades packages. `Brewfile` is the explicit package manifest for shell and verification dependencies:
+`bootstrap.sh` owns new-machine provisioning. `install.sh` owns only tracked files
+and agent wiring. `Brewfile` is the explicit full developer package manifest:
 
 ```bash
-brew bundle --file ~/dotfiles/Brewfile
+HOMEBREW_BUNDLE_NO_UPGRADE=1 brew bundle --file ~/dotfiles/Brewfile
 ```
 
-Scoped package and workflow commands such as `brew install`, `brew bundle`, `npm ci`, and `npx` are allowed when the task requires them. Avoid surprise broad machine upgrades. Codex, Claude, Grok, authentication, private overlays, and application data may still require one-time vendor login or secure restore steps.
+Scoped package and workflow commands such as `brew install`, `brew bundle`, `npm ci`, and `npx` are allowed when the task requires them. Avoid surprise broad machine upgrades. Authentication, runtime sessions, caches, and application data remain vendor-owned generated state and are not copied between machines.
 
 ## Build and verification policy
 
@@ -49,6 +96,8 @@ This is a shell and configuration repository, not a Node project. Its canonical 
 - `.config/mise/config.toml`
 - `.config/zsh/op-keys.zsh` - 1Password-backed API key loader, sourced from `.zshrc`
 - `agents/` - portable machine law, per-runtime spaces, shared skills, bootstrap (see `agents/README.md`)
+- `bootstrap.sh` - complete post-Homebrew new-Mac provisioner
+- `Brewfile` - full reproducible developer tool and application manifest
 
 ## Public repository safety
 

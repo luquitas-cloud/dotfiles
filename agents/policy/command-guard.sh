@@ -1,9 +1,9 @@
 #!/bin/bash
-# Portable PreToolUse command guard for Codex, Claude, Grok, and Cursor.
+# Portable PreToolUse command guard for Codex, Claude, Grok, Cursor, and Gemini.
 # High autonomy (yolo) is the baseline. This guard only hard-stops destructive
 # or irreversible machine/repo actions.
 # Exit 0 allows the tool call. Exit 2 blocks it and surfaces stderr.
-# Accepts Claude/Codex snake_case payloads and Grok camelCase payloads.
+# Accepts Claude/Codex/Gemini snake_case payloads and Grok camelCase payloads.
 
 set -euo pipefail
 
@@ -39,7 +39,7 @@ json_first() {
 
 TOOL=$(json_first tool_name toolName)
 case "$TOOL" in
-  Bash|run_terminal_command|Shell) ;;
+  Bash|run_terminal_command|run_shell_command|Shell) ;;
   *) exit 0 ;;
 esac
 
@@ -99,4 +99,7 @@ matches "(>|>>|tee[[:space:]]+)([[:space:]]*)${PROTECTED_SYSTEM}([[:space:]]|$)"
 matches "(^|[;&|[:space:]])([^;&|[:space:]]*/)?(rm|chmod|chown|chgrp)[[:space:]][^;&|]*${PROTECTED_SYSTEM}([[:space:]]|$)" && block "mutating protected system paths requires explicit approval"
 matches "(^|[;&|[:space:]])([^;&|[:space:]]*/)?(cp|mv|install|ln|mkdir|touch)[[:space:]]+([^;&|[:space:]]+[[:space:]]+)*${PROTECTED_SYSTEM}[[:space:]]*($|[;&|])" && block "writing to protected system paths requires explicit approval"
 
+if [ "${DOTFILES_AGENT_RUNTIME:-}" = gemini ]; then
+  printf '%s\n' '{"decision":"allow"}'
+fi
 exit 0
